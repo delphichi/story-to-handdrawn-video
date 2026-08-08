@@ -5,6 +5,8 @@ import {homedir} from 'node:os';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {resolveStyle} from './handdrawn-style-library.mjs';
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const parseArgs = (tokens) => {
@@ -27,8 +29,9 @@ const parseArgs = (tokens) => {
 const args = parseArgs(process.argv.slice(2));
 if (!args.input && !args.text) {
   console.error(
-    'Usage: npm run story -- --input examples/story.txt [--generate --apply --render]\n' +
-      '       npm run story -- --text "第一句。第二句。"',
+    'Usage: npm run story -- --input examples/story.txt [--style STYLE] [--generate --apply --render]\n' +
+      '       npm run story -- --text "第一句。第二句。" [--style 1]\n' +
+      '       npm run styles',
   );
   process.exit(1);
 }
@@ -37,6 +40,10 @@ const sourceText = args.input
   ? readFileSync(resolve(root, String(args.input)), 'utf8')
   : String(args.text);
 const title = String(args.title || '手绘故事');
+const selectedStyle = resolveStyle(root, args.style);
+const styleReferencePaths = selectedStyle.references.map(
+  (reference) => reference.absolute_path,
+);
 const textMode = String(args['text-mode'] || 'font');
 const visualPlanPath = args['visual-plan']
   ? resolve(root, String(args['visual-plan']))
@@ -189,8 +196,24 @@ const durationFor = (caption) => {
   return Number(Math.min(6.2, Math.max(4.4, 3.8 + lineCount * 0.48 + characterCount * 0.035)).toFixed(1));
 };
 
-const styleLock =
-  'minimalist Chinese diary comic reconstructed from the supplied reference video, pure white background, uneven black felt-tip pen outlines, naive wobbly proportions, rough dense black crayon scribbles for dark areas, sparse props, abundant negative space, selective muted wax-crayon color only, no realistic shading, no paper texture, no watermark';
+const styleLock = selectedStyle.prompt;
+const styleFingerprint = createHash('sha256');
+styleFingerprint.update(
+  JSON.stringify({
+    library_version: selectedStyle.library_version,
+    id: selectedStyle.id,
+    name_zh: selectedStyle.name_zh,
+    prompt: styleLock,
+    caption_prompt: selectedStyle.caption_prompt,
+    color_hint: selectedStyle.color_hint,
+    avoid: selectedStyle.avoid,
+    references: selectedStyle.references.map(({path, role}) => ({path, role})),
+  }),
+);
+for (const path of styleReferencePaths) {
+  styleFingerprint.update(readFileSync(path));
+}
+const styleVersion = styleFingerprint.digest('hex').slice(0, 16);
 const characterLock = String(
   args['character-lock'] ||
     '重复出现的主角须保持同一张脸、发型、年龄、服装配色和身体比例；具体人物身份以故事原文为准；不得添加原文未提及的配角、道具或文字',
@@ -206,7 +229,8 @@ const safeTitle =
     .replace(/^-+|-+$/g, '')
     .slice(0, 32) || 'story';
 const hashInput = [
-  generator === 'codex' ? 'codex-character-sheet-v3' : 'api-v1',
+  generator === 'codex' ? 'codex-character-sheet-v4' : 'api-v2',
+  styleVersion,
   title,
   textMode,
   transition,
@@ -217,12 +241,6 @@ const hashInput = [
 ].join('\n');
 const storyHash = createHash('sha256').update(hashInput).digest('hex').slice(0, 8);
 const assetSet = `${safeTitle}-${storyHash}`;
-
-const referenceBw = resolve(root, 'references/style-bw.png');
-const referenceColor = resolve(root, 'references/style-color.png');
-if (!existsSync(referenceBw) || !existsSync(referenceColor)) {
-  throw new Error('Missing references/style-bw.png or references/style-color.png');
-}
 
 const generatedRoot = generator === 'codex' ? `generated/codex/${assetSet}` : 'generated/auto';
 const promptDir = resolve(root, 'prompts', generatedRoot);
@@ -243,11 +261,12 @@ const imageCli = resolve(
   'skills/.system/imagegen/scripts/image_gen.py',
 );
 
-const runImage2Edit = ({images, promptFile, size, out}) => {
+const runImage2 = ({images, promptFile, size, out}) => {
   if (!existsSync(imageCli)) throw new Error(`Image 2 CLI not found: ${imageCli}`);
+  const operation = images.length > 0 ? 'edit' : 'generate';
   const commandArgs = [
     imageCli,
-    'edit',
+    operation,
     '--model',
     'gpt-image-2',
     ...images.flatMap((image) => ['--image', image]),
@@ -266,6 +285,16 @@ const runImage2Edit = ({images, promptFile, size, out}) => {
     stdio: 'inherit',
   });
 };
+
+const fixedReferenceLegend = selectedStyle.references
+  .map((reference, index) => `image ${index + 1} is the ${reference.role}`)
+  .join(', ');
+const characterReferenceBrief = fixedReferenceLegend
+  ? `Input images: ${fixedReferenceLegend}. Use them only for drawing language, proportions, texture, palette, page rhythm and final finish. Ignore every reference's people, actions, objects and text.`
+  : `Input images: no fixed style image is required for this style. Follow the named style profile exactly and do not drift toward the project's default colored-pencil look.`;
+const illustrationBackground = selectedStyle.is_default
+  ? 'pure white digital paper'
+  : 'a clean, light, style-appropriate paper or background surface';
 
 const captionCropHeight = 342;
 const captionScanHeight = 400;
@@ -315,14 +344,14 @@ if (generator === 'codex') {
   const characterPrompt = writePrompt(
     '00_character_reference.txt',
     `Use case: illustration-story
-Asset type: fixed protagonist character reference sheet for a hand-drawn Chinese diary-comic video
-Input images: the supplied black-and-white and color frames are style references only. Ignore their people, composition and Chinese text.
+Asset type: fixed protagonist character reference sheet for a hand-drawn Chinese story video in the "${selectedStyle.name_zh}" style
+${characterReferenceBrief}
 Primary request: draw ONLY the recurring protagonists described below. Show each protagonist in two simple full-body poses, front view and three-quarter view, arranged side by side.
 Character lock: ${characterLock}
 Style: ${styleLock}
-Composition: pure white square canvas, all uncropped full-body poses centered with generous spacing and a clean 10% safe border. No scenery, furniture, extra people, props or decorative marks.
-Color: selective muted wax-crayon color only. Follow the clothing colors in the character lock, use black scribbles for hair and dark trousers, and leave skin and most of the canvas white.
-Constraints: this is an identity reference only; no text, letters, numbers, labels, captions, speech bubbles, logo, signature or watermark; no realistic shading, gradients or vector cleanliness.`,
+Composition: square canvas on ${illustrationBackground}, all uncropped full-body poses centered with generous spacing and a clean 10% safe border. No scenery, furniture, extra people, props or decorative marks.
+Color and material: ${selectedStyle.color_hint}
+Constraints: this is an identity reference only; no text, letters, numbers, labels, captions, speech bubbles, logo, signature or watermark; ${selectedStyle.avoid}.`,
   );
   codexJobs.push({
     id: 'character_reference',
@@ -330,7 +359,8 @@ Constraints: this is an identity reference only; no text, letters, numbers, labe
     prompt_file: characterPrompt,
     prompt: readFileSync(characterPrompt, 'utf8').trim(),
     output_master: codexCharacterReference,
-    references: [referenceBw, referenceColor],
+    references: styleReferencePaths,
+    reference_count: styleReferencePaths.length,
   });
 }
 
@@ -350,7 +380,7 @@ for (let index = 0; index < storyParts.length; index += 1) {
   const captionPanel = usesImage2Text
     ? `Top copy panel (pixels y=0–342): pure white background. Write ONLY this Simplified Chinese caption verbatim, preserving the explicit line breaks:
 "${caption}"
-Use thick casual black felt-tip handwriting, 1–3 lines only, generous 48-pixel left/right margins, and a large readable letter size. Do not put any illustration or decorative mark in this panel. Do not place text below y=342.`
+${selectedStyle.caption_prompt} Use 1–3 large readable lines with generous 48-pixel left/right margins. Do not put any illustration or decorative mark in this panel. Do not place text below y=342.`
     : 'Use the entire canvas only for the illustration; do not add any text.';
   const textConstraint = usesImage2Text
     ? 'no extra text outside the exact top caption, no letters or numbers in the illustration, no labels, captions, speech bubbles, logo, signature or watermark'
@@ -360,11 +390,16 @@ Use thick casual black felt-tip handwriting, 1–3 lines only, generous 48-pixel
     : 'Use the entire 1024×1024 square for the scene.';
 
   const hasContinuityReference = Boolean(previousColor) || Boolean(codexCharacterReference);
+  const sceneReferenceBrief = fixedReferenceLegend
+    ? `Input images: ${fixedReferenceLegend}${hasContinuityReference ? '; any later image is an identity or continuity reference' : ''}. Use the fixed style images only for drawing language, texture, palette, page rhythm and finish. Ignore their depicted people, actions, objects and text.`
+    : hasContinuityReference
+      ? `Input images: every supplied image is an identity or continuity reference. Preserve identity and useful continuity, but follow the written "${selectedStyle.name_zh}" style profile rather than copying an earlier composition.`
+      : `Input images: none. Follow the written "${selectedStyle.name_zh}" style profile exactly.`;
   const masterPrompt = writePrompt(
     `${id}_master.txt`,
     `Use case: illustration-story
-Asset type: one vertical production master for a hand-drawn Chinese diary-comic video. This single output will be locally split into a handwritten caption plate and a color illustration plate.
-Input images: the supplied original-video frames are style references${hasContinuityReference ? '; the fixed protagonist character sheet is the identity reference' : ''}. Ignore all text in references.
+Asset type: one vertical production master for a hand-drawn Chinese story video in the "${selectedStyle.name_zh}" style. This single output will be locally split into a caption plate and an illustration plate.
+${sceneReferenceBrief}
 Narrative sentence to illustrate: "${text}"
 Scene direction: ${visualDirection}
 Create one concrete, immediately readable tableau for that sentence. Use the locked recurring protagonists whenever the current sentence requires them.
@@ -372,16 +407,19 @@ Character lock: ${characterLock}
 Style: ${styleLock}
 ${captionPanel}
 ${illustrationPanel}
-Composition: use a comfortably wide camera view. Keep the entire sparse scene in the lower-middle of its illustration square with generous white negative space. Reserve a clean white safe border of at least 10% on the left and right and 8% on the top and bottom. Every figure, limb, prop, building edge, roof, tree branch, rain stroke and motion mark must stay completely inside that safe border. Scale the scene down when necessary; never let any visible mark touch or cross a canvas edge.
-Color: selective muted wax-crayon color only: sage green, dusty blue, warm tan, brick red and warm yellow. Keep hair, trousers and other dark areas as black scribbles. Leave skin and most of the canvas pure white.
+Composition: stage one sparse, immediately readable tableau on ${illustrationBackground}. Let the subject group occupy roughly 70–82% of the illustration square while preserving abundant uncluttered negative space. Use a medium or wider view by default; a fully contained medium close-up is allowed only for a reaction beat. Reserve a clean style-appropriate safe border of at least 7% on every side. Every figure, face, hand, limb, prop, building edge, roof, tree branch, rain stroke and motion mark must stay completely inside that border. Scale the scene down when necessary; never let any visible mark touch or cross a canvas edge.
+Color and material: ${selectedStyle.color_hint}
 Continuity: preserve the locked character design. Use the fixed character sheet only for the protagonist's identity, never copy its pose or composition. Include only people required by the current narrative sentence.
 Narrative isolation: the character lock defines identities, not an automatic cast list. Show only characters explicitly named in the current sentence or strictly required for its immediate action. Never add family bystanders. Never show a future daughter, rescued child, grandmother, father or any other supporting character before that person is introduced by the narration. Do not carry any person, prop or setting forward merely because it appeared in another scene.
-Constraints: non-graphic, emotionally restrained family storytelling; no visible impact, blood, wounds, bruises or injury; no cropped or partially visible subject, prop or background structure; no close-up framing; ${textConstraint}; no graphite realism, gradients, detailed scenery or vector cleanliness.`,
+Constraints: non-graphic, emotionally restrained storytelling; no blood, wounds, bruises or injury; no cropped or partially visible subject, prop or background structure; ${textConstraint}; ${selectedStyle.avoid}.`,
   );
 
   if (shouldGenerateWithApi) {
-    runImage2Edit({
-      images: [referenceBw, referenceColor, ...(previousColor ? [previousColor] : [])],
+    runImage2({
+      images: [
+        ...styleReferencePaths,
+        ...(previousColor ? [previousColor] : []),
+      ],
       promptFile: masterPrompt,
       size: masterSize,
       out: absoluteAsset(masterName),
@@ -446,17 +484,18 @@ Constraints: non-graphic, emotionally restrained family storytelling; no visible
   }
 
   if (generator === 'codex') {
+    const codexSceneReferences = [
+      ...styleReferencePaths,
+      codexCharacterReference,
+    ];
     codexJobs.push({
       id,
       role: 'scene',
       prompt_file: masterPrompt,
       prompt: readFileSync(masterPrompt, 'utf8').trim(),
       output_master: absoluteAsset(masterName),
-      references: [
-        referenceBw,
-        referenceColor,
-        codexCharacterReference,
-      ],
+      references: codexSceneReferences,
+      reference_count: codexSceneReferences.length,
     });
   }
 
@@ -465,10 +504,10 @@ Constraints: non-graphic, emotionally restrained family storytelling; no visible
     duration_sec: durationFor(caption),
     text: caption,
     narration: text,
-    visual: `根据文案绘制一个单一、清楚、可画的白底日记漫画场景：${text}`,
+    visual: `使用“${selectedStyle.name_zh}”绘制一个单一、清楚、可画的故事场景：${text}`,
     shot: 'story_beat',
     layers: ['text', 'bw_full', 'color'],
-    color_hint: '仅使用元视频的鼠尾草绿、灰蓝、浅棕、砖红、暖黄等低饱和蜡笔色，保留大量纯白',
+    color_hint: selectedStyle.color_hint,
     detail_hint: null,
     assets: {
       text_image: usesImage2Text ? projectAsset(textName) : null,
@@ -494,6 +533,10 @@ const storyboard = {
     fps: 30,
     transition,
     transition_sec: transitionSec,
+    style_id: selectedStyle.id,
+    style_name: selectedStyle.name_zh,
+    style_library_version: selectedStyle.library_version,
+    style_fingerprint: styleVersion,
     style_lock: styleLock,
     character_lock: characterLock,
     audio: {
@@ -518,6 +561,14 @@ if (generator === 'codex') {
       {
         version: 1,
         generator: 'codex-image2',
+        style_library: selectedStyle.library_path,
+        style_library_version: selectedStyle.library_version,
+        style_id: selectedStyle.id,
+        style_name: selectedStyle.name_zh,
+        style_origin: selectedStyle.origin,
+        style_profile: selectedStyle.profile_path || selectedStyle.library_path,
+        style_fingerprint: styleVersion,
+        style_references: styleReferencePaths,
         asset_set: assetSet,
         storyboard: outputPath,
         text_mode: textMode,
@@ -531,7 +582,8 @@ if (generator === 'codex') {
 }
 
 console.log(
-  `Prepared ${scenes.length} scenes → ${outputPath}\n` +
+  `Style ${selectedStyle.order}: ${selectedStyle.name_zh} (${selectedStyle.id})\n` +
+    `Prepared ${scenes.length} scenes → ${outputPath}\n` +
     `Prompts → ${promptDir}\n` +
     (shouldGenerateWithApi
       ? `Image 2 API assets → ${assetDir}`

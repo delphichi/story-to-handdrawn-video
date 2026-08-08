@@ -38,6 +38,16 @@ def parse_args() -> argparse.Namespace:
         help="Uploaded comic pages or full-frame images, in playback order",
     )
     parser.add_argument("--title", default="手绘故事")
+    parser.add_argument(
+        "--style",
+        default="colored-pencil-diary",
+        help="Built-in style id, number, Chinese name, or alias",
+    )
+    parser.add_argument(
+        "--list-styles",
+        action="store_true",
+        help="Print the built-in style catalog and exit",
+    )
     parser.add_argument("--character-lock")
     parser.add_argument("--visual-plan", type=Path)
     parser.add_argument(
@@ -83,6 +93,10 @@ def main() -> None:
     args = parse_args()
     project = args.project_dir.expanduser().resolve()
     require_project(project)
+
+    if args.list_styles:
+        run(["npm", "run", "styles"], project)
+        return
 
     if args.images:
         if args.mode == "import":
@@ -153,6 +167,8 @@ def main() -> None:
     command += [
         "--title",
         args.title,
+        "--style",
+        args.style,
         "--text-mode",
         args.text_mode,
         "--generator",
