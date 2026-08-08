@@ -118,28 +118,28 @@ export STORY_VIDEO_PROJECT=/absolute/path/to/story-to-handdrawn-video
 
 ![20 种手绘风格总览](references/style-examples/handdrawn-style-library-contact-sheet.jpg)
 
-| # | Style id | 中文名 | 视觉特征 | 推荐题材 |
-|---:|---|---|---|---|
-| 1 | `colored-pencil-diary` | 彩铅日记漫画（默认） | 笨拙黑色毡尖笔轮廓、低饱和彩铅乱涂、大留白 | 家庭、生活、纪实情感 |
-| 2 | `minimal-line-explainer` | 极简黑白线条讲解 | 米白纸、细黑单线、火柴人与极少道具 | 科普、流程、观点 |
-| 3 | `kid-crayon` | 五岁儿童蜡笔坏画 | 歪扭比例、线条不闭合、明亮蜡笔涂出边界 | 童年、亲子、轻喜剧 |
-| 4 | `rawkid-crayon` | 潦草家庭投稿蜡笔 | 家长歪线稿、孩子粗乱上色、大片露白 | 家庭连载、温暖日常 |
-| 5 | `bean-doodle-infographic` | 小豆人涂鸦信息图 | 黑色圆豆人、白点眼、单一橙色强调 | 步骤、清单、知识卡 |
-| 6 | `ms-paint-bad-doodle` | 鼠标烂涂鸦 | 锯齿鼠标线、荒谬比例、粗糙纯色块 | 吐槽、反转、荒诞 |
-| 7 | `ballpoint-scribble` | 圆珠笔缠绕线速写 | 单色圆珠笔缠绕线、疏密塑形、现场手稿感 | 肖像、动物、独白 |
-| 8 | `real-crayon-paper` | 真实蜡笔纸实拍 | 可见纸纹、蜡质结块、压力变化与大量漏白 | 儿童视角、成长记录 |
-| 9 | `ink-wash` | 水墨写意 | 宣纸、浓淡干湿、飞白枯笔与朱红点睛 | 文化、寓言、感悟 |
-| 10 | `emotional-watercolor-sketch` | 情绪叙事淡彩速写 | 靛蓝松散速写、透明淡彩、单一暖橙焦点 | 回忆、关系、克制纪实 |
-| 11 | `retro-gouache-concept` | 中古动画水粉概念稿 | 奶油纸、水粉大形、橙蓝互补、干刷边缘 | 怀旧、城市、温暖剧情 |
-| 12 | `sunlit-storybook` | 暖光童画绘本 | 柔软水粉、暖边光、蓬松形状与未完成感 | 治愈、童话、亲情 |
-| 13 | `nordic-gouache-storybook` | 北欧低饱和水粉绘本 | 丹宁蓝与芥末黄、哑光颗粒、安静留白 | 日常、自然、睡前故事 |
-| 14 | `inked-storybook` | 墨线淡彩绘本 | 清晰墨线、轻薄水彩、角色表演突出 | 角色、青春、对白 |
-| 15 | `warm-flat-storybook` | 暖色几何扁平绘本 | 简化几何块面、暖色平涂、清楚视觉层级 | 关系、品牌、轻科普 |
-| 16 | `naive-marker-notes` | 稚拙马克笔笔记 | 粗黑马克笔、荧光重点与随手批注感 | 社媒、观点、年轻化内容 |
-| 17 | `zine-riso-collage` | Zine 孔版拼贴 | 复印颗粒、撕纸拼贴、有限孔版套色 | 成长、旅行、音乐文化 |
-| 18 | `organic-contour-doodle` | 有机轮廓品牌涂鸦 | 松弛轮廓、温暖点色、生活方式插画感 | 餐饮、生活方式、品牌故事 |
-| 19 | `whiteboard-explainer` | 白板讲解动画 | 白底黑线、少量红蓝标记、步骤清晰 | 教程、商业解释、时间线 |
-| 20 | `linocut-editorial` | 粗粝木刻社论插画 | 高反差刻痕、套色偏移、纸张颗粒 | 社会议题、历史、寓言 |
+| # | 示例 | Style id | 中文名 | 视觉特征 | 推荐题材 |
+|---:|:---:|---|---|---|---|
+| 1 | <a href="references/style-examples/01-colored-pencil-diary.png"><img src="references/style-examples/01-colored-pencil-diary.png" width="120" alt="彩铅日记漫画示例"></a> | `colored-pencil-diary` | 彩铅日记漫画（默认） | 笨拙黑色毡尖笔轮廓、低饱和彩铅乱涂、大留白 | 家庭、生活、纪实情感 |
+| 2 | <a href="references/style-examples/02-minimal-line-explainer.png"><img src="references/style-examples/02-minimal-line-explainer.png" width="120" alt="极简黑白线条讲解示例"></a> | `minimal-line-explainer` | 极简黑白线条讲解 | 米白纸、细黑单线、火柴人与极少道具 | 科普、流程、观点 |
+| 3 | <a href="references/style-examples/03-kid-crayon.png"><img src="references/style-examples/03-kid-crayon.png" width="120" alt="五岁儿童蜡笔坏画示例"></a> | `kid-crayon` | 五岁儿童蜡笔坏画 | 歪扭比例、线条不闭合、明亮蜡笔涂出边界 | 童年、亲子、轻喜剧 |
+| 4 | <a href="references/style-examples/04-rawkid-crayon.png"><img src="references/style-examples/04-rawkid-crayon.png" width="120" alt="潦草家庭投稿蜡笔示例"></a> | `rawkid-crayon` | 潦草家庭投稿蜡笔 | 家长歪线稿、孩子粗乱上色、大片露白 | 家庭连载、温暖日常 |
+| 5 | <a href="references/style-examples/05-bean-doodle-infographic.png"><img src="references/style-examples/05-bean-doodle-infographic.png" width="120" alt="小豆人涂鸦信息图示例"></a> | `bean-doodle-infographic` | 小豆人涂鸦信息图 | 黑色圆豆人、白点眼、单一橙色强调 | 步骤、清单、知识卡 |
+| 6 | <a href="references/style-examples/06-ms-paint-bad-doodle.png"><img src="references/style-examples/06-ms-paint-bad-doodle.png" width="120" alt="鼠标烂涂鸦示例"></a> | `ms-paint-bad-doodle` | 鼠标烂涂鸦 | 锯齿鼠标线、荒谬比例、粗糙纯色块 | 吐槽、反转、荒诞 |
+| 7 | <a href="references/style-examples/07-ballpoint-scribble.png"><img src="references/style-examples/07-ballpoint-scribble.png" width="120" alt="圆珠笔缠绕线速写示例"></a> | `ballpoint-scribble` | 圆珠笔缠绕线速写 | 单色圆珠笔缠绕线、疏密塑形、现场手稿感 | 肖像、动物、独白 |
+| 8 | <a href="references/style-examples/08-real-crayon-paper.png"><img src="references/style-examples/08-real-crayon-paper.png" width="120" alt="真实蜡笔纸实拍示例"></a> | `real-crayon-paper` | 真实蜡笔纸实拍 | 可见纸纹、蜡质结块、压力变化与大量漏白 | 儿童视角、成长记录 |
+| 9 | <a href="references/style-examples/09-ink-wash.png"><img src="references/style-examples/09-ink-wash.png" width="120" alt="水墨写意示例"></a> | `ink-wash` | 水墨写意 | 宣纸、浓淡干湿、飞白枯笔与朱红点睛 | 文化、寓言、感悟 |
+| 10 | <a href="references/style-examples/10-emotional-watercolor-sketch.png"><img src="references/style-examples/10-emotional-watercolor-sketch.png" width="120" alt="情绪叙事淡彩速写示例"></a> | `emotional-watercolor-sketch` | 情绪叙事淡彩速写 | 靛蓝松散速写、透明淡彩、单一暖橙焦点 | 回忆、关系、克制纪实 |
+| 11 | <a href="references/style-examples/11-retro-gouache-concept.png"><img src="references/style-examples/11-retro-gouache-concept.png" width="120" alt="中古动画水粉概念稿示例"></a> | `retro-gouache-concept` | 中古动画水粉概念稿 | 奶油纸、水粉大形、橙蓝互补、干刷边缘 | 怀旧、城市、温暖剧情 |
+| 12 | <a href="references/style-examples/12-sunlit-storybook.png"><img src="references/style-examples/12-sunlit-storybook.png" width="120" alt="暖光童画绘本示例"></a> | `sunlit-storybook` | 暖光童画绘本 | 柔软水粉、暖边光、蓬松形状与未完成感 | 治愈、童话、亲情 |
+| 13 | <a href="references/style-examples/13-nordic-gouache-storybook.png"><img src="references/style-examples/13-nordic-gouache-storybook.png" width="120" alt="北欧低饱和水粉绘本示例"></a> | `nordic-gouache-storybook` | 北欧低饱和水粉绘本 | 丹宁蓝与芥末黄、哑光颗粒、安静留白 | 日常、自然、睡前故事 |
+| 14 | <a href="references/style-examples/14-inked-storybook.png"><img src="references/style-examples/14-inked-storybook.png" width="120" alt="墨线淡彩绘本示例"></a> | `inked-storybook` | 墨线淡彩绘本 | 清晰墨线、轻薄水彩、角色表演突出 | 角色、青春、对白 |
+| 15 | <a href="references/style-examples/15-warm-flat-storybook.png"><img src="references/style-examples/15-warm-flat-storybook.png" width="120" alt="暖色几何扁平绘本示例"></a> | `warm-flat-storybook` | 暖色几何扁平绘本 | 简化几何块面、暖色平涂、清楚视觉层级 | 关系、品牌、轻科普 |
+| 16 | <a href="references/style-examples/16-naive-marker-notes.png"><img src="references/style-examples/16-naive-marker-notes.png" width="120" alt="稚拙马克笔笔记示例"></a> | `naive-marker-notes` | 稚拙马克笔笔记 | 粗黑马克笔、荧光重点与随手批注感 | 社媒、观点、年轻化内容 |
+| 17 | <a href="references/style-examples/17-zine-riso-collage.png"><img src="references/style-examples/17-zine-riso-collage.png" width="120" alt="Zine 孔版拼贴示例"></a> | `zine-riso-collage` | Zine 孔版拼贴 | 复印颗粒、撕纸拼贴、有限孔版套色 | 成长、旅行、音乐文化 |
+| 18 | <a href="references/style-examples/18-organic-contour-doodle.png"><img src="references/style-examples/18-organic-contour-doodle.png" width="120" alt="有机轮廓品牌涂鸦示例"></a> | `organic-contour-doodle` | 有机轮廓品牌涂鸦 | 松弛轮廓、温暖点色、生活方式插画感 | 餐饮、生活方式、品牌故事 |
+| 19 | <a href="references/style-examples/19-whiteboard-explainer.png"><img src="references/style-examples/19-whiteboard-explainer.png" width="120" alt="白板讲解动画示例"></a> | `whiteboard-explainer` | 白板讲解动画 | 白底黑线、少量红蓝标记、步骤清晰 | 教程、商业解释、时间线 |
+| 20 | <a href="references/style-examples/20-linocut-editorial.png"><img src="references/style-examples/20-linocut-editorial.png" width="120" alt="粗粝木刻社论插画示例"></a> | `linocut-editorial` | 粗粝木刻社论插画 | 高反差刻痕、套色偏移、纸张颗粒 | 社会议题、历史、寓言 |
 
 查看完整菜单和每张示例图路径:
 
@@ -294,28 +294,28 @@ The samples below use the same characters, action, and composition so line work,
 
 ![20-style hand-drawn library](references/style-examples/handdrawn-style-library-contact-sheet.jpg)
 
-| # | Style id | English name | Best fit |
-|---:|---|---|---|
-| 1 | `colored-pencil-diary` | Colored-pencil diary comic (default) | family, everyday life, documentary emotion |
-| 2 | `minimal-line-explainer` | Minimal line explainer | education, process, ideas |
-| 3 | `kid-crayon` | Kid crayon bad drawing | childhood, parenting, light comedy |
-| 4 | `rawkid-crayon` | Raw family crayon card | family serials, warm daily moments |
-| 5 | `bean-doodle-infographic` | Bean doodle infographic | steps, lists, knowledge cards |
-| 6 | `ms-paint-bad-doodle` | MS Paint bad doodle | satire, reversal, absurdity |
-| 7 | `ballpoint-scribble` | Ballpoint scribble sketch | portraits, animals, monologue |
-| 8 | `real-crayon-paper` | Real crayon paper | child viewpoint, growth records |
-| 9 | `ink-wash` | Expressive ink wash | culture, fables, reflection |
-| 10 | `emotional-watercolor-sketch` | Emotional light-watercolor sketch | memory, relationships, restrained documentary |
-| 11 | `retro-gouache-concept` | Mid-century gouache concept | nostalgia, cities, warm drama |
-| 12 | `sunlit-storybook` | Sunlit storybook vis-dev | healing stories, fairy tales, family |
-| 13 | `nordic-gouache-storybook` | Nordic gouache storybook | quiet daily life, nature, bedtime stories |
-| 14 | `inked-storybook` | Inked light-watercolor storybook | character scenes, youth, dialogue |
-| 15 | `warm-flat-storybook` | Warm flat storybook | relationships, branding, light education |
-| 16 | `naive-marker-notes` | Naive marker notes | social posts, opinions, youth content |
-| 17 | `zine-riso-collage` | Zine risograph collage | growth, travel, music culture |
-| 18 | `organic-contour-doodle` | Organic contour doodle | lifestyle, food, brand stories |
-| 19 | `whiteboard-explainer` | Whiteboard explainer | tutorials, business concepts, timelines |
-| 20 | `linocut-editorial` | Linocut editorial | social issues, history, fables |
+| # | Sample | Style id | English name | Best fit |
+|---:|:---:|---|---|---|
+| 1 | <a href="references/style-examples/01-colored-pencil-diary.png"><img src="references/style-examples/01-colored-pencil-diary.png" width="120" alt="Colored-pencil diary comic sample"></a> | `colored-pencil-diary` | Colored-pencil diary comic (default) | family, everyday life, documentary emotion |
+| 2 | <a href="references/style-examples/02-minimal-line-explainer.png"><img src="references/style-examples/02-minimal-line-explainer.png" width="120" alt="Minimal line explainer sample"></a> | `minimal-line-explainer` | Minimal line explainer | education, process, ideas |
+| 3 | <a href="references/style-examples/03-kid-crayon.png"><img src="references/style-examples/03-kid-crayon.png" width="120" alt="Kid crayon bad drawing sample"></a> | `kid-crayon` | Kid crayon bad drawing | childhood, parenting, light comedy |
+| 4 | <a href="references/style-examples/04-rawkid-crayon.png"><img src="references/style-examples/04-rawkid-crayon.png" width="120" alt="Raw family crayon card sample"></a> | `rawkid-crayon` | Raw family crayon card | family serials, warm daily moments |
+| 5 | <a href="references/style-examples/05-bean-doodle-infographic.png"><img src="references/style-examples/05-bean-doodle-infographic.png" width="120" alt="Bean doodle infographic sample"></a> | `bean-doodle-infographic` | Bean doodle infographic | steps, lists, knowledge cards |
+| 6 | <a href="references/style-examples/06-ms-paint-bad-doodle.png"><img src="references/style-examples/06-ms-paint-bad-doodle.png" width="120" alt="MS Paint bad doodle sample"></a> | `ms-paint-bad-doodle` | MS Paint bad doodle | satire, reversal, absurdity |
+| 7 | <a href="references/style-examples/07-ballpoint-scribble.png"><img src="references/style-examples/07-ballpoint-scribble.png" width="120" alt="Ballpoint scribble sketch sample"></a> | `ballpoint-scribble` | Ballpoint scribble sketch | portraits, animals, monologue |
+| 8 | <a href="references/style-examples/08-real-crayon-paper.png"><img src="references/style-examples/08-real-crayon-paper.png" width="120" alt="Real crayon paper sample"></a> | `real-crayon-paper` | Real crayon paper | child viewpoint, growth records |
+| 9 | <a href="references/style-examples/09-ink-wash.png"><img src="references/style-examples/09-ink-wash.png" width="120" alt="Expressive ink wash sample"></a> | `ink-wash` | Expressive ink wash | culture, fables, reflection |
+| 10 | <a href="references/style-examples/10-emotional-watercolor-sketch.png"><img src="references/style-examples/10-emotional-watercolor-sketch.png" width="120" alt="Emotional light-watercolor sketch sample"></a> | `emotional-watercolor-sketch` | Emotional light-watercolor sketch | memory, relationships, restrained documentary |
+| 11 | <a href="references/style-examples/11-retro-gouache-concept.png"><img src="references/style-examples/11-retro-gouache-concept.png" width="120" alt="Mid-century gouache concept sample"></a> | `retro-gouache-concept` | Mid-century gouache concept | nostalgia, cities, warm drama |
+| 12 | <a href="references/style-examples/12-sunlit-storybook.png"><img src="references/style-examples/12-sunlit-storybook.png" width="120" alt="Sunlit storybook sample"></a> | `sunlit-storybook` | Sunlit storybook vis-dev | healing stories, fairy tales, family |
+| 13 | <a href="references/style-examples/13-nordic-gouache-storybook.png"><img src="references/style-examples/13-nordic-gouache-storybook.png" width="120" alt="Nordic gouache storybook sample"></a> | `nordic-gouache-storybook` | Nordic gouache storybook | quiet daily life, nature, bedtime stories |
+| 14 | <a href="references/style-examples/14-inked-storybook.png"><img src="references/style-examples/14-inked-storybook.png" width="120" alt="Inked light-watercolor storybook sample"></a> | `inked-storybook` | Inked light-watercolor storybook | character scenes, youth, dialogue |
+| 15 | <a href="references/style-examples/15-warm-flat-storybook.png"><img src="references/style-examples/15-warm-flat-storybook.png" width="120" alt="Warm flat storybook sample"></a> | `warm-flat-storybook` | Warm flat storybook | relationships, branding, light education |
+| 16 | <a href="references/style-examples/16-naive-marker-notes.png"><img src="references/style-examples/16-naive-marker-notes.png" width="120" alt="Naive marker notes sample"></a> | `naive-marker-notes` | Naive marker notes | social posts, opinions, youth content |
+| 17 | <a href="references/style-examples/17-zine-riso-collage.png"><img src="references/style-examples/17-zine-riso-collage.png" width="120" alt="Zine risograph collage sample"></a> | `zine-riso-collage` | Zine risograph collage | growth, travel, music culture |
+| 18 | <a href="references/style-examples/18-organic-contour-doodle.png"><img src="references/style-examples/18-organic-contour-doodle.png" width="120" alt="Organic contour doodle sample"></a> | `organic-contour-doodle` | Organic contour doodle | lifestyle, food, brand stories |
+| 19 | <a href="references/style-examples/19-whiteboard-explainer.png"><img src="references/style-examples/19-whiteboard-explainer.png" width="120" alt="Whiteboard explainer sample"></a> | `whiteboard-explainer` | Whiteboard explainer | tutorials, business concepts, timelines |
+| 20 | <a href="references/style-examples/20-linocut-editorial.png"><img src="references/style-examples/20-linocut-editorial.png" width="120" alt="Linocut editorial sample"></a> | `linocut-editorial` | Linocut editorial | social issues, history, fables |
 
 List styles and their example paths:
 
