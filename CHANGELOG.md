@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-08
+
+### Added
+
+- Built-in library of 20 selectable hand-drawn styles with aliases, intended
+  use cases, prompt recipes, negative constraints, and source attribution.
+- One square comparison sample per style plus a labeled contact sheet.
+- `--style` selection by order, id, Chinese name, English name, or alias,
+  and `--list-styles` catalog output with example paths.
+
+### Changed
+
+- Keep the approved colored-pencil diary look as the immutable default while
+  allowing non-default styles to use independent prompt locks and palettes.
+- Include the selected style and reference fingerprint in generated asset
+  caches so switching styles cannot silently reuse stale images.
+- Expand the Skill contract, UI metadata, and bilingual README with visual
+  selection guidance and the complete style table.
+
 ## [1.0.0] - 2026-07-21
 
 ### Added
@@ -21,5 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `STORY_VIDEO_PROJECT` discovery and upward directory walk.
 - Example story, style references, and the Ma Shan Zheng font (OFL).
 
-[Unreleased]: https://github.com/gnipbao/story-to-handdrawn-video/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/gnipbao/story-to-handdrawn-video/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/gnipbao/story-to-handdrawn-video/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/gnipbao/story-to-handdrawn-video/releases/tag/v1.0.0
