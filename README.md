@@ -185,12 +185,14 @@ Skill 的完整行为约定见 [skill-package/story-to-handdrawn-video/SKILL.md]
 | --- | --- | --- |
 | `check.yml` | push / PR / 手动 | TypeScript 检查，并用临时生成的图片跑一遍导入 + 分镜校验 |
 | `render-uploaded.yml` | 手动（workflow_dispatch） | 把 `inputs/` 目录里的有序图片渲染成视频，产物作为 artifact 下载 |
+| `render-story.yml` | 手动（workflow_dispatch） | **故事文本 → 出图 → 视频**，出图交给 FAL AI（需 `FAL_KEY` secret）|
 
 渲染流程：把按顺序命名的图片（`01.png`、`02.png`…）提交到 `inputs/`，然后在 **Actions → render-uploaded → Run workflow** 里选择标题、转场（`cut` / `page-flip`）、布局、每页时长和画质（`preview` / `final`），运行结束后从 artifact 下载 `out/*.mp4`。
 
 几点限制：
 
-- **出图那步默认跑不了，但这不是 Actions 的限制。** 本仓库不含任何图像生成器：`scripts/story-to-video.mjs` 的 `runImage2()` 把提示词文件和参考图交给 `$CODEX_HOME/skills/.system/imagegen/scripts/image_gen.py`，那个 CLI 属于 Codex，不在仓库里。提示词构建、ffmpeg 拆图、分镜写入全在仓库内，在 runner 上都能正常跑。要让 `--generator api` 在 Actions 上跑通，只需在 runner 上放一个接口相同的 `image_gen.py`（`generate|edit --model --image… --prompt-file --size --quality --out [--force]`，把 PNG 写到 `--out`），再设好 `CODEX_HOME` 与 `OPENAI_API_KEY`——仓库代码一行都不用改。默认的 `--generator codex` 是另一回事：它只写出 `codex-image-jobs.json` 交给 agent 逐条完成，需要 CI 里真的有一个 agent 在跑。上面两个工作流没有接这一步，只覆盖导入与渲染。
+- **出图这步由 `tools/fal-imagegen/` 补上。** 本仓库本身不含图像生成器：`scripts/story-to-video.mjs` 的 `runImage2()` 把提示词文件和参考图交给 `$CODEX_HOME/skills/.system/imagegen/scripts/image_gen.py`，那个 CLI 属于 Codex，不在仓库里。`tools/fal-imagegen/` 用同样的接口重新实现了它，底层调 [delphichi/2025TRIP](https://github.com/delphichi/2025TRIP) 的 `fal_image.py`（FAL AI 的 `gpt-image-2`）。`render-story.yml` 只是把 `CODEX_HOME` 指过去，渲染器一行代码都不用改。需要在 Settings → Secrets 里加 `FAL_KEY`。
+- **默认的 `--generator codex` 仍然需要人。** 它不出图，只写出 `codex-image-jobs.json` 交给 agent 逐条完成，要在 CI 上跑得在 workflow 里真的跑一个 agent。`render-story.yml` 走的是 `--generator api` 这条路。
 - **不要直接在 CI 上跑 `npm run check`。** `check:storyboard` 会校验分镜引用的 PNG 是否存在，而 `public/assets/generated/` 在 `.gitignore` 里；干净检出时必然失败。工作流因此拆成 `check:types` + 针对现场生成的分镜做校验。
 - **`package-lock.json` 里的 231 个依赖都指向 `registry.npmmirror.com`。** 工作流用 `npm ci --registry=https://registry.npmjs.org --replace-registry-host=always` 改写主机名，避免从 GitHub runner 访问镜像源。
 - **需要 Chrome Headless Shell。** runner 预装的 Chrome 已移除旧版 headless 模式，Remotion 会启动失败，所以工作流里先执行 `npx remotion browser ensure`（约 150MB，从 `remotion.media` 下载；若组织限制出网需放行该域名）。
@@ -373,12 +375,14 @@ Two workflows ship in `.github/workflows/`:
 | --- | --- | --- |
 | `check.yml` | push / PR / manual | Type check, plus an import + storyboard-validation smoke run on throwaway images |
 | `render-uploaded.yml` | manual (workflow_dispatch) | Renders the ordered images in `inputs/` and uploads the video as an artifact |
+| `render-story.yml` | manual (workflow_dispatch) | **Story text → illustrations → video**, with FAL AI drawing the frames (needs a `FAL_KEY` secret) |
 
 Commit your pages as `inputs/01.png`, `inputs/02.png`, …, then run **Actions → render-uploaded → Run workflow** and pick title, transition, layout, page duration, and quality. Download `out/*.mp4` from the run's artifacts.
 
 Limits worth knowing:
 
-- **Illustration generation is not wired up here — but that is not an Actions limitation.** This repo ships no image generator: `runImage2()` in `scripts/story-to-video.mjs` hands the prompt file and reference images to `$CODEX_HOME/skills/.system/imagegen/scripts/image_gen.py`, a CLI that belongs to Codex. Prompt construction, the ffmpeg plate splitting, and storyboard writing all live in this repo and run fine on a runner. To make `--generator api` work in Actions, drop in an `image_gen.py` with the same contract (`generate|edit --model --image… --prompt-file --size --quality --out [--force]`, writing a PNG to `--out`) and set `CODEX_HOME` plus `OPENAI_API_KEY` — no repo changes needed. The default `--generator codex` is different: it only emits `codex-image-jobs.json` for an agent to fulfil, so it needs an actual agent running in CI. The workflows above cover import and render only.
+- **Illustration generation comes from `tools/fal-imagegen/`.** This repo ships no image generator of its own: `runImage2()` in `scripts/story-to-video.mjs` hands the prompt file and reference images to `$CODEX_HOME/skills/.system/imagegen/scripts/image_gen.py`, a CLI that belongs to Codex. `tools/fal-imagegen/` reimplements that contract on top of `fal_image.py` from [delphichi/2025TRIP](https://github.com/delphichi/2025TRIP), which calls FAL AI's `gpt-image-2`. `render-story.yml` simply points `CODEX_HOME` at it — the renderer is untouched. Add a `FAL_KEY` repository secret to use it.
+- **The default `--generator codex` still needs a human (or an agent).** It draws nothing; it only emits `codex-image-jobs.json` for an agent to fulfil, so running it in CI means running an actual agent in the workflow. `render-story.yml` takes the `--generator api` path instead.
 - **Do not run `npm run check` as-is in CI.** `check:storyboard` asserts that every referenced PNG exists, and `public/assets/generated/` is gitignored, so it always fails on a clean checkout. The workflow runs `check:types` and validates a storyboard it builds during the run.
 - **`package-lock.json` resolves all 231 packages from `registry.npmmirror.com`.** The workflows install with `npm ci --registry=https://registry.npmjs.org --replace-registry-host=always`.
 - **Chrome Headless Shell is required.** The runner's preinstalled Chrome dropped old headless mode, so `npx remotion browser ensure` runs first (~150 MB from `remotion.media`; allowlist that host if egress is restricted).
