@@ -177,6 +177,25 @@ python3 scripts/run_story_video.py \
 
 Skill 的完整行为约定见 [skill-package/story-to-handdrawn-video/SKILL.md](skill-package/story-to-handdrawn-video/SKILL.md)。
 
+### 在 GitHub Actions 上运行
+
+仓库内置两个工作流（`.github/workflows/`）：
+
+| 工作流 | 触发方式 | 作用 |
+| --- | --- | --- |
+| `check.yml` | push / PR / 手动 | TypeScript 检查，并用临时生成的图片跑一遍导入 + 分镜校验 |
+| `render-uploaded.yml` | 手动（workflow_dispatch） | 把 `inputs/` 目录里的有序图片渲染成视频，产物作为 artifact 下载 |
+
+渲染流程：把按顺序命名的图片（`01.png`、`02.png`…）提交到 `inputs/`，然后在 **Actions → render-uploaded → Run workflow** 里选择标题、转场（`cut` / `page-flip`）、布局、每页时长和画质（`preview` / `final`），运行结束后从 artifact 下载 `out/*.mp4`。
+
+几点限制：
+
+- **图片生成不能在 CI 上跑。** 无论 `--generator codex` 还是 `--generator api`，`scripts/story-to-video.mjs` 都会调用本机 Codex 的 `~/.codex/skills/.system/imagegen/scripts/image_gen.py`；GitHub 托管的 runner 上没有这个 CLI。因此“故事文本 → 插画”这一步仍需本地或装了 Codex 的机器完成，CI 只负责导入与渲染。
+- **不要直接在 CI 上跑 `npm run check`。** `check:storyboard` 会校验分镜引用的 PNG 是否存在，而 `public/assets/generated/` 在 `.gitignore` 里；干净检出时必然失败。工作流因此拆成 `check:types` + 针对现场生成的分镜做校验。
+- **`package-lock.json` 里的 231 个依赖都指向 `registry.npmmirror.com`。** 工作流用 `npm ci --registry=https://registry.npmjs.org --replace-registry-host=always` 改写主机名，避免从 GitHub runner 访问镜像源。
+- **需要 Chrome Headless Shell。** runner 预装的 Chrome 已移除旧版 headless 模式，Remotion 会启动失败，所以工作流里先执行 `npx remotion browser ensure`（约 150MB，从 `remotion.media` 下载；若组织限制出网需放行该域名）。
+- ffmpeg 与 ffprobe 都是必需的，工作流会在缺失时用 apt 安装。
+
 ### 项目结构
 
 ```text
@@ -345,6 +364,25 @@ The machine-readable recipes live in [references/handdrawn-style-library.json](r
 | Uploaded images | preview | `out/uploaded_picture_silent-preview.mp4` |
 
 Final 1080×1440, preview 720×960, H.264, silent. The full behavior contract lives in [SKILL.md](skill-package/story-to-handdrawn-video/SKILL.md).
+
+### GitHub Actions
+
+Two workflows ship in `.github/workflows/`:
+
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| `check.yml` | push / PR / manual | Type check, plus an import + storyboard-validation smoke run on throwaway images |
+| `render-uploaded.yml` | manual (workflow_dispatch) | Renders the ordered images in `inputs/` and uploads the video as an artifact |
+
+Commit your pages as `inputs/01.png`, `inputs/02.png`, …, then run **Actions → render-uploaded → Run workflow** and pick title, transition, layout, page duration, and quality. Download `out/*.mp4` from the run's artifacts.
+
+Limits worth knowing:
+
+- **Image generation cannot run in CI.** Both `--generator codex` and `--generator api` shell out to the local Codex image CLI at `~/.codex/skills/.system/imagegen/scripts/image_gen.py`, which GitHub-hosted runners do not have. Text → illustration stays a local step; CI handles import and render.
+- **Do not run `npm run check` as-is in CI.** `check:storyboard` asserts that every referenced PNG exists, and `public/assets/generated/` is gitignored, so it always fails on a clean checkout. The workflow runs `check:types` and validates a storyboard it builds during the run.
+- **`package-lock.json` resolves all 231 packages from `registry.npmmirror.com`.** The workflows install with `npm ci --registry=https://registry.npmjs.org --replace-registry-host=always`.
+- **Chrome Headless Shell is required.** The runner's preinstalled Chrome dropped old headless mode, so `npx remotion browser ensure` runs first (~150 MB from `remotion.media`; allowlist that host if egress is restricted).
+- ffmpeg and ffprobe are both required; the workflows apt-install them when missing.
 
 ### License
 
