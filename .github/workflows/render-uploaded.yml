@@ -1,9 +1,10 @@
 name: render-uploaded
 
 # Renders a hand-drawn video from an ordered set of images that live in the
-# repository. Image *generation* (Codex Image2 / OpenAI) cannot run here — it
-# needs the Codex imagegen CLI on a local machine — so this workflow covers the
-# uploaded-images half of the pipeline only.
+# repository. Illustration generation is not wired up here: story-to-video.mjs
+# delegates it to $CODEX_HOME/skills/.system/imagegen/scripts/image_gen.py,
+# which ships with Codex rather than with this repo. Supply a CLI with that same
+# contract on the runner and --generator api works here too; see the README.
 
 on:
   workflow_dispatch:
