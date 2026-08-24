@@ -14,12 +14,20 @@ name: render-story
 on:
   workflow_dispatch:
     inputs:
+      premise:
+        description: 'One sentence to expand into a story. Leave empty to use story_file instead.'
+        required: false
+        default: ''
+      scenes:
+        description: 'How many beats to expand the premise into (2-20)'
+        required: true
+        default: '8'
       story_file:
-        description: 'UTF-8 story text file in this repo'
+        description: 'UTF-8 story text file in this repo (ignored when premise is set)'
         required: true
         default: 'examples/story.txt'
       title:
-        description: 'Video title'
+        description: 'Video title (a premise run uses the title the model picks, unless you change this)'
         required: true
         default: '手绘故事'
       style:
@@ -93,6 +101,33 @@ jobs:
       - name: Ensure browser
         run: npx remotion browser ensure
 
+      # One sentence in, a shot-list-shaped story out. Uses the same FAL_KEY as
+      # the illustrations, via FAL's any-llm endpoint.
+      - name: Expand premise into a story
+        if: inputs.premise != ''
+        env:
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          PREMISE: ${{ inputs.premise }}
+          SCENES: ${{ inputs.scenes }}
+        run: |
+          set -euo pipefail
+          node scripts/expand-story.mjs \
+            --premise "$PREMISE" \
+            --scenes "$SCENES" \
+            --out story.generated.txt \
+            --lock-out character-lock.generated.txt
+          echo "STORY_FILE=story.generated.txt" >> "$GITHUB_ENV"
+          {
+            echo "### 展开后的故事"
+            echo '```'
+            cat story.generated.txt
+            echo '```'
+            echo "### 角色锁定"
+            echo '```'
+            cat character-lock.generated.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate illustrations and storyboard
         env:
           FAL_KEY: ${{ secrets.FAL_KEY }}
@@ -101,7 +136,8 @@ jobs:
           # story-to-video.mjs only checks that this is non-empty before taking
           # the --generator api path; the adapter authenticates with FAL_KEY.
           OPENAI_API_KEY: unused-images-come-from-fal
-          STORY_FILE: ${{ inputs.story_file }}
+          # Set by the expand step when a premise was given; falls back to the input.
+          STORY_FILE: ${{ env.STORY_FILE || inputs.story_file }}
           TITLE: ${{ inputs.title }}
           STYLE: ${{ inputs.style }}
           TEXT_MODE: ${{ inputs.text_mode }}
@@ -109,15 +145,15 @@ jobs:
         run: |
           set -euo pipefail
           test -f "$STORY_FILE" || { echo "Story file not found: $STORY_FILE" >&2; exit 1; }
-          npm run story -- \
-            --input "$STORY_FILE" \
-            --title "$TITLE" \
-            --style "$STYLE" \
-            --text-mode "$TEXT_MODE" \
-            --transition "$TRANSITION" \
-            --generator api \
-            --generate \
-            --apply
+          ARGS=(--input "$STORY_FILE" --title "$TITLE" --style "$STYLE"
+                --text-mode "$TEXT_MODE" --transition "$TRANSITION"
+                --generator api --generate --apply)
+          # The expanded story ships its own character lock; without one the
+          # renderer falls back to a generic description and faces drift.
+          if [ -s character-lock.generated.txt ]; then
+            ARGS+=(--character-lock "$(cat character-lock.generated.txt)")
+          fi
+          npm run story -- "${ARGS[@]}"
           node scripts/validate-storyboard.mjs storyboard.json
 
       - name: Render
@@ -134,6 +170,8 @@ jobs:
           path: |
             out/*.mp4
             storyboard.json
+            story.generated.txt
+            character-lock.generated.txt
             public/assets/generated/**
             prompts/generated/**
           retention-days: 14
