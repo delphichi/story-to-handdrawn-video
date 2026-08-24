@@ -8,6 +8,7 @@
 // can be handed to `npm run story`.
 import {writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
+import {splitStory} from './lib/split-story.mjs';
 
 const parseArgs = (tokens) => {
   const parsed = {};
@@ -64,8 +65,16 @@ const system = `你是一位中文短篇故事作者，为无配音的手绘故�
 
 同时给出角色锁定（character_lock）：用一段话固定所有反复出现的角色，写明各自的年龄、脸型、发型、服装颜色与身体比例。这段文字会被送进每一张插画的提示词，用来保证同一个人在所有画面里长得一样。只描述外观，不要写剧情。
 
+再给出镜头设计（shots），与 story 一一对应、长度相同，每格一句英文，说明这一格怎么取景。规则：
+
+1. 只用这四种景别：wide establishing shot、full shot、medium shot、medium close-up。
+2. medium close-up 只能用在情绪反应的那一两格，其余用中景或更远。不要 extreme close-up，也不要要求裁切人物。
+3. 不要连续两格用同一种景别——景别变化是这支片子唯一的节奏来源。
+4. 除景别外，说明视角（eye level / low angle / high angle）与画面重心放什么。
+5. 每句不超过 25 个英文单词，只写怎么拍，不要重复剧情，不要提颜色或画材。
+
 只输出 JSON，不要任何其他文字：
-{"title": "四到八字的标题", "character_lock": "...", "story": ["第一句。", "第二句。"]}`;
+{"title": "四到八字的标题", "character_lock": "...", "story": ["第一句。", "第二句。"], "shots": ["Wide establishing shot, eye level, ...", "Medium shot, low angle, ..."]}`;
 
 const parseJson = (text) => {
   const cleaned = String(text || '')
@@ -137,12 +146,38 @@ if (result.story.length !== scenes) {
 
 const storyPath = resolve(String(args.out || 'story.generated.txt'));
 const lockPath = resolve(String(args['lock-out'] || 'character-lock.generated.txt'));
+const planPath = resolve(String(args['plan-out'] || 'visual-plan.generated.json'));
 writeFileSync(storyPath, `${result.story.join('\n')}\n`);
 writeFileSync(lockPath, `${String(result.character_lock || '').trim()}\n`);
+
+// The renderer numbers scenes from the *split* story, and a sentence over 36
+// characters becomes two beats. Split here with the same function so the plan's
+// keys land on the scenes they were written for; when a sentence does split,
+// both halves inherit its shot.
+const shots = Array.isArray(result.shots) ? result.shots : [];
+const visualPlan = {};
+let beatIndex = 0;
+for (const [sentenceIndex, sentence] of result.story.entries()) {
+  const beats = splitStory(sentence);
+  const shot = String(shots[sentenceIndex] || '').trim();
+  for (let offset = 0; offset < beats.length; offset += 1) {
+    beatIndex += 1;
+    if (shot) visualPlan[String(beatIndex).padStart(2, '0')] = shot;
+  }
+  if (beats.length > 1) {
+    console.log(`⚠️  Sentence ${sentenceIndex + 1} splits into ${beats.length} beats; each reuses its shot.`);
+  }
+}
+writeFileSync(planPath, `${JSON.stringify(visualPlan, null, 2)}\n`);
+
+if (shots.length !== result.story.length) {
+  console.log(`⚠️  ${shots.length} shot directions for ${result.story.length} sentences; the rest fall back to the default framing.`);
+}
 
 console.log(
   `Model: ${usedModel}\n` +
     `Title: ${result.title || '(none)'}\n` +
-    `Story (${result.story.length} beats) → ${storyPath}\n` +
-    `Character lock → ${lockPath}`,
+    `Story (${result.story.length} sentences → ${beatIndex} beats) → ${storyPath}\n` +
+    `Character lock → ${lockPath}\n` +
+    `Visual plan (${Object.keys(visualPlan).length} beats) → ${planPath}`,
 );

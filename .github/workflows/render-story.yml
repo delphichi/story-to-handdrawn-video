@@ -115,7 +115,8 @@ jobs:
             --premise "$PREMISE" \
             --scenes "$SCENES" \
             --out story.generated.txt \
-            --lock-out character-lock.generated.txt
+            --lock-out character-lock.generated.txt \
+            --plan-out visual-plan.generated.json
           echo "STORY_FILE=story.generated.txt" >> "$GITHUB_ENV"
           {
             echo "### 展开后的故事"
@@ -125,6 +126,10 @@ jobs:
             echo "### 角色锁定"
             echo '```'
             cat character-lock.generated.txt
+            echo '```'
+            echo "### 镜头设计"
+            echo '```json'
+            cat visual-plan.generated.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -153,6 +158,10 @@ jobs:
           if [ -s character-lock.generated.txt ]; then
             ARGS+=(--character-lock "$(cat character-lock.generated.txt)")
           fi
+          # Per-beat framing; without it every scene gets the same default view.
+          if [ -s visual-plan.generated.json ]; then
+            ARGS+=(--visual-plan visual-plan.generated.json)
+          fi
           npm run story -- "${ARGS[@]}"
           node scripts/validate-storyboard.mjs storyboard.json
 
@@ -172,6 +181,7 @@ jobs:
             storyboard.json
             story.generated.txt
             character-lock.generated.txt
+            visual-plan.generated.json
             public/assets/generated/**
             prompts/generated/**
           retention-days: 14
