@@ -173,16 +173,67 @@ jobs:
             npm run render:preview
           fi
 
+      # Everything a run produces lands in one dated folder, so the artifact
+      # unpacks as a single self-contained package instead of five scattered
+      # paths. Mirrors the 完成檔 convention used by fal-image in 2025TRIP.
+      # Everything a run produces lands in one dated folder, so the artifact
+      # unpacks as a single self-contained package instead of five scattered
+      # paths. Mirrors the 完成檔 convention used by fal-image in 2025TRIP.
+      - name: Collect outputs
+        id: collect
+        env:
+          TITLE: ${{ inputs.title }}
+        run: |
+          set -euo pipefail
+          slug=$(python3 -c "
+          import re, sys
+          name = re.sub(r'[^\w]+', '-', sys.argv[1], flags=re.UNICODE).strip('-')
+          print(name[:40] or 'story')
+          " "$TITLE")
+          dir="完成檔/${slug}-$(date -u '+%Y%m%d-%H%M')"
+          mkdir -p "$dir"
+
+          shopt -s nullglob
+          videos=(out/*.mp4)
+          extras=(story.generated.txt character-lock.generated.txt visual-plan.generated.json)
+          shopt -u nullglob
+
+          if [ ${#videos[@]} -eq 0 ]; then
+            echo "No rendered video in out/" >&2
+            exit 1
+          fi
+
+          # Name the video after the story: picture_silent.mp4 -> <slug>.mp4,
+          # picture_silent-preview.mp4 -> <slug>-preview.mp4.
+          for video in "${videos[@]}"; do
+            base=$(basename "$video" .mp4)
+            cp "$video" "$dir/${slug}${base#picture_silent}.mp4"
+          done
+
+          cp storyboard.json "$dir/storyboard.json"
+          for extra in "${extras[@]}"; do
+            if [ -s "$extra" ]; then
+              cp "$extra" "$dir/${extra/.generated/}"
+            fi
+          done
+          if [ -d public/assets/generated ]; then
+            cp -r public/assets/generated "$dir/插图"
+          fi
+          if [ -d prompts/generated ]; then
+            cp -r prompts/generated "$dir/提示词"
+          fi
+
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 输出"
+            echo '```'
+            find "$dir" -type f | sort
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         with:
           name: handdrawn-story-${{ inputs.quality }}
-          path: |
-            out/*.mp4
-            storyboard.json
-            story.generated.txt
-            character-lock.generated.txt
-            visual-plan.generated.json
-            public/assets/generated/**
-            prompts/generated/**
+          path: ${{ steps.collect.outputs.dir }}
           retention-days: 14
           if-no-files-found: error
