@@ -37,6 +37,15 @@ export type Storyboard = {
     fps: number;
     transition?: 'cut' | 'page-flip';
     transition_sec?: number;
+    // Written by scripts/story-to-video.mjs so a storyboard records which style
+    // recipe produced it. Unused by the renderer, but declared here: without
+    // them a freshly generated storyboard.json has properties the cast in
+    // storyboard.ts does not know about, and `npm run check` fails after every
+    // generation run — pointing at export_size, which is not the real cause.
+    style_id?: string;
+    style_name?: string;
+    style_library_version?: number;
+    style_fingerprint?: string;
     style_lock: string;
     character_lock: string;
     audio: {
