@@ -79,6 +79,15 @@ action（角色在做什么）
 7. 只出现这一句里必须出场的角色，不要凭空加人。
 8. 不超过 20 个英文单词。
 
+position（主体在空间里的位置）
+9a. 写主体相对镜头和场景的站位，例如 far end of the aisle、just inside the doorway、close to camera at frame right。
+9b. 这一栏是给画面用的实际调度信息，不是形容词；不超过 12 个英文单词。
+
+move（相对上一格的取景推进）
+9c. 只用这五个值：static、push-in、pull-back、track-left、track-right。
+9d. 这支片子本身没有镜头运动，所以 move 描述的是**这一格相对上一格的取景变化**：push-in = 比上一格更近，pull-back = 比上一格更远，track-* = 距离相近但横向移位。第一格固定用 static。
+9e. move 必须和 camera 的景别一致：写了 push-in，景别就要真的比上一格紧。
+
 environment（场景）
 9. 写地点、时间感、以及这一格必须出现的关键道具。
 10. 同一个地点在相邻几格里要用一致的描述，读者才不会觉得场景在跳。
@@ -94,8 +103,10 @@ environment（场景）
 17. id 用小写英文短词，例如 courtyard、drying-yard、kite。
 18. 每一格的 shots 要写明 location（必须是上面列过的 id）；这一格若出现关键道具，objects 填对应 id 的数组，否则给空数组。
 
+再给出调色板（palette）：4 到 6 个 hex 色值，取自这个风格实际会用到的颜色，从浅到深排列。只输出 #rrggbb 格式。
+
 只输出 JSON，不要任何其他文字：
-{"title": "四到八字的标题", "character_lock": "...", "locations": [{"id": "courtyard", "name": "旧院门口", "description": "..."}], "objects": [{"id": "kite", "name": "断线风筝", "description": "..."}], "story": ["第一句。", "第二句。"], "shots": [{"camera": "Wide establishing shot, eye level, ...", "action": "...", "environment": "...", "location": "courtyard", "objects": ["kite"]}]}`;
+{"title": "四到八字的标题", "character_lock": "...", "palette": ["#f4efe6", "#8fa6a0"], "locations": [{"id": "courtyard", "name": "旧院门口", "description": "..."}], "objects": [{"id": "kite", "name": "断线风筝", "description": "..."}], "story": ["第一句。", "第二句。"], "shots": [{"camera": "Wide establishing shot, eye level, ...", "action": "...", "position": "...", "move": "static", "environment": "...", "location": "courtyard", "objects": ["kite"]}]}`;
 
 const parseJson = (text) => {
   const cleaned = String(text || '')
@@ -202,7 +213,19 @@ const knownIds = (ids, pool, kind) => {
   return kept;
 };
 
-const shotFields = ['camera', 'action', 'environment'];
+const MOVES = ['static', 'push-in', 'pull-back', 'track-left', 'track-right'];
+const paletteFrom = (value) => {
+  const colors = (Array.isArray(value) ? value : [])
+    .map((color) => String(color || '').trim().toLowerCase())
+    .filter((color) => /^#[0-9a-f]{6}$/.test(color));
+  if (Array.isArray(value) && colors.length < value.length) {
+    console.log(`⚠️  Dropped ${value.length - colors.length} palette entries that were not #rrggbb.`);
+  }
+  return colors.slice(0, 6);
+};
+const palette = paletteFrom(result.palette);
+
+const shotFields = ['camera', 'action', 'position', 'environment'];
 const normaliseShot = (shot) => {
   if (typeof shot === 'string') return shot.trim();
   if (!shot || typeof shot !== 'object') return '';
@@ -250,12 +273,18 @@ writeFileSync(
     {
       title: result.title || '',
       character_lock: String(result.character_lock || '').trim(),
+      palette,
       locations,
       objects,
       shots: result.story.map((sentence, sentenceIndex) => ({
         text: sentence,
         ...(typeof rawShots[sentenceIndex] === 'object' && rawShots[sentenceIndex]
-          ? rawShots[sentenceIndex]
+          ? {
+              ...rawShots[sentenceIndex],
+              move: MOVES.includes(String(rawShots[sentenceIndex].move || '').trim())
+                ? String(rawShots[sentenceIndex].move).trim()
+                : 'static',
+            }
           : {camera: shots[sentenceIndex] || ''}),
       })),
     },
@@ -273,6 +302,7 @@ console.log(
     `Title: ${result.title || '(none)'}\n` +
     `Story (${result.story.length} sentences → ${beatIndex} beats) → ${storyPath}\n` +
     `Character lock → ${lockPath}\n` +
+    `Palette: ${palette.join(' ') || '(none)'}\n` +
     `Locations: ${Object.keys(locations).join(', ') || '(none)'}\n` +
     `Objects: ${Object.keys(objects).join(', ') || '(none)'}\n` +
     `Visual plan (${Object.keys(visualPlan).length} beats) → ${planPath}\n` +

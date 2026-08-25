@@ -212,6 +212,22 @@ jobs:
             npm run render:preview
           fi
 
+      # Typography is why this is composited locally rather than drawn: a model
+      # asked to letter "Full shot, low angle | 4.4s | PUSH-IN" garbles it, a
+      # browser does not. Durations are passed only when a storyboard was
+      # actually built this run, or they would come from the checked-in one.
+      - name: Compose preview board
+        if: inputs.sheet != 'off'
+        env:
+          STYLE: ${{ inputs.style }}
+        run: |
+          set -euo pipefail
+          ARGS=(--shot-list shot-list.generated.json --style "$STYLE")
+          if [ "${{ inputs.sheet }}" = "also" ] && [ -s storyboard.json ]; then
+            ARGS+=(--storyboard storyboard.json)
+          fi
+          npm run board -- "${ARGS[@]}"
+
       # Everything a run produces lands in one dated folder, so the artifact
       # unpacks as a single self-contained package instead of five scattered
       # paths. Mirrors the 完成檔 convention used by fal-image in 2025TRIP.
@@ -241,13 +257,14 @@ jobs:
             shot-list.generated.json
             storyboard-sheet.generated.png
             storyboard-sheet.generated.txt
+            preview-board.generated.png
           )
           shopt -u nullglob
 
           # A sheet-only run stops before rendering, so a missing video is only
           # a failure when there is no sheet either.
-          if [ ${#videos[@]} -eq 0 ] && [ ! -s storyboard-sheet.generated.png ]; then
-            echo "Nothing was produced: no video in out/ and no storyboard sheet" >&2
+          if [ ${#videos[@]} -eq 0 ] && [ ! -s preview-board.generated.png ]; then
+            echo "Nothing was produced: no video in out/ and no preview board" >&2
             exit 1
           fi
 
