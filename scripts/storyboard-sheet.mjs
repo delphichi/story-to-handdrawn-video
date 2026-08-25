@@ -14,6 +14,16 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createImageGenerator, gridSize} from './lib/image-gen.mjs';
+import {
+  backgroundFor,
+  CHARACTER_SHEET_SIZE,
+  SET_SHEET_SIZE,
+  characterSheetPrompt,
+  locationSheetPrompt,
+  objectSheetPrompt,
+  referenceFileName,
+  styleLegendFor,
+} from './lib/reference-sheets.mjs';
 import {resolveStyle} from './handdrawn-style-library.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -60,40 +70,52 @@ const writePrompt = (name, value) => {
   return path;
 };
 
-const illustrationBackground = selectedStyle.is_default
-  ? 'pure white digital paper'
-  : 'a clean, light, style-appropriate paper or background surface';
-const styleLegend = selectedStyle.references
-  .map((reference, index) => `image ${index + 1} is the ${reference.role}, for drawing language only`)
-  .join('; ');
+const styleLegend = styleLegendFor(selectedStyle);
+const illustrationBackground = backgroundFor(selectedStyle);
 
-// Reuse the run's character sheet when given one so the preview is anchored to
-// exactly what the final render will use; otherwise draw it here.
-let characterSheet = args['character-sheet']
+// Anchors are written to a directory the real run can be pointed at, so the
+// sheet you approve and the frames that get rendered cite the same images.
+const referenceDir = resolve(root, String(args['reference-dir'] || 'references.generated'));
+mkdirSync(referenceDir, {recursive: true});
+
+const drawReference = (kind, id, prompt, size) => {
+  const file = resolve(referenceDir, referenceFileName(kind, id));
+  if (existsSync(file) && args.force !== true) {
+    console.log(`Reusing ${kind} reference: ${file}`);
+    return file;
+  }
+  const promptPath = writePrompt(referenceFileName(kind, id).replace(/\.png$/, '.txt'), prompt);
+  console.log(`→ Drawing the ${kind} reference${id ? ` (${id})` : ''}`);
+  runImage2({images: styleReferencePaths, promptFile: promptPath, size, out: file});
+  return file;
+};
+
+const characterSheet = args['character-sheet']
   ? resolve(root, String(args['character-sheet']))
-  : resolve(root, 'character-sheet.generated.png');
+  : drawReference(
+      'character',
+      null,
+      characterSheetPrompt({style: selectedStyle, characterLock}),
+      CHARACTER_SHEET_SIZE,
+    );
 if (args['character-sheet'] && !existsSync(characterSheet)) {
   throw new Error(`Character sheet not found: ${characterSheet}`);
 }
-if (!args['character-sheet']) {
-  const characterPrompt = writePrompt(
-    'character_reference.txt',
-    `Use case: illustration-story
-Asset type: fixed protagonist character reference sheet for a hand-drawn Chinese story video in the "${selectedStyle.name_zh}" style
-${styleLegend ? `Input images: ${styleLegend}. Ignore their depicted people, actions, objects and text.` : 'Input images: none. Follow the named style profile exactly.'}
-Primary request: draw ONLY the recurring protagonists described below as a character turnaround. Give each protagonist one row of four standing full-body views, left to right: front, three-quarter, side profile, and back. Keep the arms relaxed at the sides in every view so the clothing reads clearly.
-Character lock: ${characterLock}
-Style: ${selectedStyle.prompt}
-Composition: wide canvas on ${illustrationBackground}. One protagonist per row. Within a row the four views share the same height and stand on a common baseline, evenly spaced, so they read as the same person rotating. Every figure is uncropped full-body with a clean 8% safe border. No scenery, furniture, extra people, props or decorative marks.
-Color and material: ${selectedStyle.color_hint}
-Constraints: this is an identity reference only; no text, letters, numbers, labels, captions, speech bubbles, logo, signature or watermark; ${selectedStyle.avoid}.`,
-  );
-  console.log('→ Drawing the character sheet');
-  runImage2({
-    images: styleReferencePaths,
-    promptFile: characterPrompt,
-    size: '2048x1024',
-    out: characterSheet,
+
+const asEntries = (value) => (value && typeof value === 'object' ? value : {});
+const locations = asEntries(shotList.locations);
+const objects = asEntries(shotList.objects);
+const setSheets = [];
+for (const [id, entry] of Object.entries(locations)) {
+  setSheets.push({
+    path: drawReference('location', id, locationSheetPrompt({style: selectedStyle, entry}), SET_SHEET_SIZE),
+    role: `the fixed reference for the ${entry.name || id} location — keep its layout and structure identical in every panel set there`,
+  });
+}
+for (const [id, entry] of Object.entries(objects)) {
+  setSheets.push({
+    path: drawReference('object', id, objectSheetPrompt({style: selectedStyle, entry}), SET_SHEET_SIZE),
+    role: `the fixed reference for the ${entry.name || id} — keep its shape, material and wear identical`,
   });
 }
 
@@ -113,6 +135,21 @@ const panelLines = shots
   })
   .join('\n');
 
+const sheetReferences = [
+  ...selectedStyle.references.map((reference, index) => ({
+    path: styleReferencePaths[index],
+    role: `the ${reference.role}, for drawing language only`,
+  })),
+  {
+    path: characterSheet,
+    role:
+      "the fixed character sheet — the single source of truth for every " +
+      "protagonist's face, hair, age, build and clothing colours. Copy the " +
+      'identity exactly into every panel and never copy its poses',
+  },
+  ...setSheets,
+];
+
 // Only the panel number is drawn as text. Asking the model to letter full
 // Camera/Action/Environment captions garbles them at this size; the readable
 // breakdown is written beside the sheet instead.
@@ -120,7 +157,7 @@ const sheetPrompt = writePrompt(
   'storyboard_sheet.txt',
   `Use case: illustration-story
 Asset type: one professional previsualisation storyboard sheet for a hand-drawn Chinese story video in the "${selectedStyle.name_zh}" style.
-Input images: ${styleLegend ? `${styleLegend}; ` : ''}image ${styleReferencePaths.length + 1} is the fixed character sheet — the single source of truth for every protagonist's face, hair, age, build and clothing colours. Copy the identity exactly into every panel and never copy its poses.${styleLegend ? " Ignore the style images' depicted people, actions, objects and text." : ''}
+Input images: ${sheetReferences.map((reference, index) => `image ${index + 1} is ${reference.role}`).join('; ')}.${styleLegend ? " Ignore the style images' depicted people, actions, objects and text." : ''}
 Primary request: draw a ${columns}-column by ${rows}-row grid of ${shots.length} storyboard panels on one sheet, read left to right then top to bottom, in story order.
 Panels:
 ${panelLines}
@@ -133,7 +170,7 @@ Constraints: the ONLY text anywhere on the sheet is the two-digit panel number i
 
 console.log(`→ Drawing the sheet: ${shots.length} panels, ${columns}x${rows}, ${size}`);
 runImage2({
-  images: [...styleReferencePaths, characterSheet],
+  images: sheetReferences.map((reference) => reference.path),
   promptFile: sheetPrompt,
   size,
   out: outPath,
@@ -168,7 +205,7 @@ writeFileSync(
 console.log(
   `Storyboard sheet → ${outPath}\n` +
     `Shot breakdown → ${textPath}\n` +
-    `Character sheet → ${characterSheet}\n` +
-    'Reuse it in the real run: npm run story -- ... --character-sheet ' +
-    `${characterSheet.replace(`${root}/`, '')}`,
+    `References (${sheetReferences.length - styleReferencePaths.length}) → ${referenceDir}\n` +
+    'Reuse them in the real run: npm run story -- ... --reference-dir ' +
+    `${referenceDir.replace(`${root}/`, '')}`,
 );

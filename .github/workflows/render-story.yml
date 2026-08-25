@@ -195,9 +195,10 @@ jobs:
           if [ -s visual-plan.generated.json ]; then
             ARGS+=(--visual-plan visual-plan.generated.json)
           fi
-          # Anchor the render to the sheet that was reviewed, not a fresh draw.
-          if [ -s character-sheet.generated.png ]; then
-            ARGS+=(--character-sheet character-sheet.generated.png)
+          # Anchor the render to the references that were reviewed on the sheet —
+          # character, each location, each key prop — rather than fresh draws.
+          if [ -d references.generated ]; then
+            ARGS+=(--reference-dir references.generated)
           fi
           npm run story -- "${ARGS[@]}"
           node scripts/validate-storyboard.mjs storyboard.json
@@ -240,7 +241,6 @@ jobs:
             shot-list.generated.json
             storyboard-sheet.generated.png
             storyboard-sheet.generated.txt
-            character-sheet.generated.png
           )
           shopt -u nullglob
 
@@ -271,6 +271,9 @@ jobs:
           fi
           if [ -d prompts/generated ]; then
             cp -r prompts/generated "$dir/提示词"
+          fi
+          if [ -d references.generated ]; then
+            cp -r references.generated "$dir/参考图"
           fi
 
           echo "dir=$dir" >> "$GITHUB_OUTPUT"

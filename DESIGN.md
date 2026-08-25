@@ -13,11 +13,14 @@
 - Page-flip mode: `text → color`, followed by a left-bound 3D page turn
 - No camera shake, bounce, narration, or text-synchronized music
 
-## Character identity
+## Fixed references
 
 - Every run draws one fixed character sheet before any scene
 - The sheet is a turnaround: front, three-quarter, side and back, one row per protagonist
 - Each scene references that sheet for identity, never an earlier scene
+- Each location and key prop gets its own reference, drawn before any scene
+- A location reference is empty; a prop reference stands alone
+- A beat cites only the references it uses
 - Referencing the previous scene is opt-in; it compounds drift and fights the shot plan
 
 ## Assets

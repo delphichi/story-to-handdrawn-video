@@ -85,8 +85,17 @@ environment（场景）
 11. 不要提颜色、画材或笔触——那些由风格锁定统一管。
 12. 不超过 20 个英文单词。
 
+再给出地点清单（locations）与关键道具清单（objects）。这两份清单各自会被画成一张参考图，然后钉住所有画面——就像角色锁定钉住人一样。规则：
+
+13. locations 最多 4 个，只列真正不同的地点；同一个地方不要因为时间或天气不同就拆成两个。
+14. 每个地点的 description 写空景：格局、结构、主要陈设、光线方向。不写人，不写剧情。用英文，不超过 40 个单词。
+15. objects 最多 2 个，只列贯穿全片、且观众会认得出来的关键道具；没有就给空数组。
+16. 每个道具的 description 写它单独放着的样子：形状、材质、大小、磨损痕迹。用英文，不超过 30 个单词。
+17. id 用小写英文短词，例如 courtyard、drying-yard、kite。
+18. 每一格的 shots 要写明 location（必须是上面列过的 id）；这一格若出现关键道具，objects 填对应 id 的数组，否则给空数组。
+
 只输出 JSON，不要任何其他文字：
-{"title": "四到八字的标题", "character_lock": "...", "story": ["第一句。", "第二句。"], "shots": [{"camera": "Wide establishing shot, eye level, ...", "action": "...", "environment": "..."}]}`;
+{"title": "四到八字的标题", "character_lock": "...", "locations": [{"id": "courtyard", "name": "旧院门口", "description": "..."}], "objects": [{"id": "kite", "name": "断线风筝", "description": "..."}], "story": ["第一句。", "第二句。"], "shots": [{"camera": "Wide establishing shot, eye level, ...", "action": "...", "environment": "...", "location": "courtyard", "objects": ["kite"]}]}`;
 
 const parseJson = (text) => {
   const cleaned = String(text || '')
@@ -166,6 +175,33 @@ writeFileSync(lockPath, `${String(result.character_lock || '').trim()}\n`);
 // characters becomes two beats. Split here with the same function so the plan's
 // keys land on the scenes they were written for; when a sentence does split,
 // both halves inherit its shot.
+const asEntries = (list, kind) => {
+  const entries = {};
+  for (const item of Array.isArray(list) ? list : []) {
+    const id = String(item?.id || '').trim();
+    const description = String(item?.description || '').trim();
+    if (!id || !description) {
+      console.log(`⚠️  Skipping a ${kind} with no id or description.`);
+      continue;
+    }
+    entries[id] = {name: String(item.name || id).trim(), description};
+  }
+  return entries;
+};
+const locations = asEntries(result.locations, 'location');
+const objects = asEntries(result.objects, 'object');
+
+const knownIds = (ids, pool, kind) => {
+  const kept = [];
+  for (const id of Array.isArray(ids) ? ids : [ids]) {
+    const value = String(id || '').trim();
+    if (!value) continue;
+    if (pool[value]) kept.push(value);
+    else console.log(`⚠️  Shot refers to unknown ${kind} "${value}"; it will have no reference image.`);
+  }
+  return kept;
+};
+
 const shotFields = ['camera', 'action', 'environment'];
 const normaliseShot = (shot) => {
   if (typeof shot === 'string') return shot.trim();
@@ -179,21 +215,33 @@ const normaliseShot = (shot) => {
     .map((field) => `${field[0].toUpperCase()}${field.slice(1)}: ${String(shot[field]).trim()}`)
     .join('; ');
 };
-const shots = (Array.isArray(result.shots) ? result.shots : []).map(normaliseShot);
+const rawShots = Array.isArray(result.shots) ? result.shots : [];
+const shots = rawShots.map(normaliseShot);
 const visualPlan = {};
 let beatIndex = 0;
 for (const [sentenceIndex, sentence] of result.story.entries()) {
   const beats = splitStory(sentence);
   const shot = shots[sentenceIndex] || '';
+  const raw = rawShots[sentenceIndex];
+  const location = knownIds([raw?.location], locations, 'location')[0] || null;
+  const shotObjects = knownIds(raw?.objects, objects, 'object');
   for (let offset = 0; offset < beats.length; offset += 1) {
     beatIndex += 1;
-    if (shot) visualPlan[String(beatIndex).padStart(2, '0')] = shot;
+    if (!shot && !location && shotObjects.length === 0) continue;
+    visualPlan[String(beatIndex).padStart(2, '0')] = {
+      ...(shot ? {direction: shot} : {}),
+      ...(location ? {location} : {}),
+      ...(shotObjects.length ? {objects: shotObjects} : {}),
+    };
   }
   if (beats.length > 1) {
     console.log(`⚠️  Sentence ${sentenceIndex + 1} splits into ${beats.length} beats; each reuses its shot.`);
   }
 }
-writeFileSync(planPath, `${JSON.stringify(visualPlan, null, 2)}\n`);
+writeFileSync(
+  planPath,
+  `${JSON.stringify({locations, objects, beats: visualPlan}, null, 2)}\n`,
+);
 
 const sheetPath = resolve(String(args['sheet-out'] || 'shot-list.generated.json'));
 writeFileSync(
@@ -202,10 +250,12 @@ writeFileSync(
     {
       title: result.title || '',
       character_lock: String(result.character_lock || '').trim(),
+      locations,
+      objects,
       shots: result.story.map((sentence, sentenceIndex) => ({
         text: sentence,
-        ...(typeof result.shots?.[sentenceIndex] === 'object' && result.shots[sentenceIndex]
-          ? result.shots[sentenceIndex]
+        ...(typeof rawShots[sentenceIndex] === 'object' && rawShots[sentenceIndex]
+          ? rawShots[sentenceIndex]
           : {camera: shots[sentenceIndex] || ''}),
       })),
     },
@@ -223,6 +273,8 @@ console.log(
     `Title: ${result.title || '(none)'}\n` +
     `Story (${result.story.length} sentences → ${beatIndex} beats) → ${storyPath}\n` +
     `Character lock → ${lockPath}\n` +
+    `Locations: ${Object.keys(locations).join(', ') || '(none)'}\n` +
+    `Objects: ${Object.keys(objects).join(', ') || '(none)'}\n` +
     `Visual plan (${Object.keys(visualPlan).length} beats) → ${planPath}\n` +
     `Shot list → ${sheetPath}`,
 );

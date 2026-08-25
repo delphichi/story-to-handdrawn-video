@@ -4,6 +4,14 @@ import {copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync} from '
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createImageGenerator} from './lib/image-gen.mjs';
+import {
+  CHARACTER_SHEET_SIZE,
+  SET_SHEET_SIZE,
+  characterSheetPrompt,
+  locationSheetPrompt,
+  objectSheetPrompt,
+  referenceFileName,
+} from './lib/reference-sheets.mjs';
 import {splitStory} from './lib/split-story.mjs';
 import {resolveStyle} from './handdrawn-style-library.mjs';
 
@@ -48,9 +56,17 @@ const textMode = String(args['text-mode'] || 'font');
 const visualPlanPath = args['visual-plan']
   ? resolve(root, String(args['visual-plan']))
   : null;
-const visualPlan = visualPlanPath
+const rawVisualPlan = visualPlanPath
   ? JSON.parse(readFileSync(visualPlanPath, 'utf8'))
   : {};
+const visualPlan = rawVisualPlan.beats ?? rawVisualPlan;
+const planLocations = rawVisualPlan.locations ?? {};
+const planObjects = rawVisualPlan.objects ?? {};
+const planEntryFor = (id) => {
+  const entry = visualPlan[id];
+  if (typeof entry === 'string') return {direction: entry};
+  return entry && typeof entry === 'object' ? entry : {};
+};
 const generator = String(args.generator || 'codex');
 const transition = String(args.transition || 'cut');
 const transitionSec = Number(args['transition-sec'] || 0.7);
@@ -58,6 +74,11 @@ const shouldGenerate = args.generate === true;
 const shouldGenerateWithApi = shouldGenerate && generator === 'api';
 const shouldPrepareCodex = shouldGenerate && generator === 'codex';
 const shouldChainPrevious = args['chain-previous'] === true;
+// A directory of already-approved reference sheets. Anything matching by name is
+// reused instead of redrawn, so what a preview run approved is what renders.
+const referenceDir = args['reference-dir']
+  ? resolve(root, String(args['reference-dir']))
+  : null;
 const shouldApply = args.apply === true;
 const shouldRender = args.render === true;
 const shouldForce = args.force === true;
@@ -246,21 +267,13 @@ const codexJobs = [];
 // every shot inherits the last shot's drift and it compounds down the story.
 // Four views per protagonist need width: on a square canvas each figure would
 // land around 256px and lose the face detail the sheet exists to pin down.
-const characterSheetSize = '2048x1024';
-let characterReference = absoluteAsset('00_character_reference.png');
+let characterReference = absoluteAsset(referenceFileName('character'));
 {
   const characterPrompt = writePrompt(
     '00_character_reference.txt',
-    `Use case: illustration-story
-Asset type: fixed protagonist character reference sheet for a hand-drawn Chinese story video in the "${selectedStyle.name_zh}" style
-${characterReferenceBrief}
-Primary request: draw ONLY the recurring protagonists described below as a character turnaround. Give each protagonist one row of four standing full-body views, left to right: front, three-quarter, side profile, and back. Keep the arms relaxed at the sides in every view so the clothing reads clearly.
-Character lock: ${characterLock}
-Style: ${styleLock}
-Composition: wide canvas on ${illustrationBackground}. One protagonist per row. Within a row the four views share the same height and stand on a common baseline, evenly spaced, so they read as the same person rotating. Every figure is uncropped full-body with a clean 8% safe border. No scenery, furniture, extra people, props or decorative marks.
-Color and material: ${selectedStyle.color_hint}
-Constraints: this is an identity reference only; no text, letters, numbers, labels, captions, speech bubbles, logo, signature or watermark; ${selectedStyle.avoid}.`,
+    characterSheetPrompt({style: selectedStyle, characterLock, brief: characterReferenceBrief}),
   );
+
   if (generator === 'codex') {
     codexJobs.push({
       id: 'character_reference',
@@ -274,9 +287,12 @@ Constraints: this is an identity reference only; no text, letters, numbers, labe
   } else if (shouldGenerateWithApi) {
     // Reusing the sheet a preview run already drew keeps the identity anchor
     // byte-identical between what you approved and what gets rendered.
+    const fromDir = referenceDir ? resolve(referenceDir, '00_character_reference.png') : null;
     const provided = args['character-sheet']
       ? resolve(root, String(args['character-sheet']))
-      : null;
+      : fromDir && existsSync(fromDir)
+        ? fromDir
+        : null;
     if (provided) {
       if (!existsSync(provided)) throw new Error(`Character sheet not found: ${provided}`);
       copyFileSync(provided, characterReference);
@@ -285,7 +301,7 @@ Constraints: this is an identity reference only; no text, letters, numbers, labe
       runImage2({
         images: styleReferencePaths,
         promptFile: characterPrompt,
-        size: characterSheetSize,
+        size: CHARACTER_SHEET_SIZE,
         out: characterReference,
       });
     }
@@ -293,6 +309,69 @@ Constraints: this is an identity reference only; no text, letters, numbers, labe
     // Plan-only run: nothing is drawn, so there is no sheet to reference.
     characterReference = null;
   }
+}
+
+// A place and a prop drift between shots exactly the way a face does, so each
+// gets the same treatment: one reference drawn once, cited by every beat that
+// uses it, rather than re-described from scratch each time.
+const setReferences = {};
+const drawSetReference = ({kind, id, prompt}) => {
+  const name = referenceFileName(kind, id);
+  const file = absoluteAsset(name);
+  const promptPath = writePrompt(name.replace(/\.png$/, '.txt'), prompt);
+  const provided = referenceDir ? resolve(referenceDir, name) : null;
+  if (provided && existsSync(provided)) {
+    copyFileSync(provided, file);
+    console.log(`Reusing ${kind} reference: ${provided}`);
+  } else if (shouldGenerateWithApi) {
+    runImage2({images: styleReferencePaths, promptFile: promptPath, size: SET_SHEET_SIZE, out: file});
+  } else if (generator === 'codex') {
+    codexJobs.push({
+      id: `${kind}_${id}`,
+      role: 'reference',
+      prompt_file: promptPath,
+      prompt: readFileSync(promptPath, 'utf8').trim(),
+      output_master: file,
+      references: styleReferencePaths,
+      reference_count: styleReferencePaths.length,
+    });
+  } else {
+    return null;
+  }
+  return file;
+};
+
+// Only draw what the story actually uses; an unused location is a wasted call.
+const usedLocations = new Set();
+const usedObjects = new Set();
+for (let index = 0; index < storyParts.length; index += 1) {
+  const entry = planEntryFor(String(index + 1).padStart(2, '0'));
+  if (entry.location && planLocations[entry.location]) usedLocations.add(entry.location);
+  for (const objectId of entry.objects || []) {
+    if (planObjects[objectId]) usedObjects.add(objectId);
+  }
+}
+for (const id of usedLocations) {
+  setReferences[`location:${id}`] = drawSetReference({
+    kind: 'location',
+    id,
+    prompt: locationSheetPrompt({
+      style: selectedStyle,
+      entry: planLocations[id],
+      brief: characterReferenceBrief,
+    }),
+  });
+}
+for (const id of usedObjects) {
+  setReferences[`object:${id}`] = drawSetReference({
+    kind: 'object',
+    id,
+    prompt: objectSheetPrompt({
+      style: selectedStyle,
+      entry: planObjects[id],
+      brief: characterReferenceBrief,
+    }),
+  });
 }
 
 for (let index = 0; index < storyParts.length; index += 1) {
@@ -303,8 +382,9 @@ for (let index = 0; index < storyParts.length; index += 1) {
   const colorName = `${id}_color.png`;
   const masterName = `${id}_master.png`;
   const caption = formatCaption(text);
+  const planEntry = planEntryFor(id);
   const visualDirection = String(
-    visualPlan[id] || 'Stage one simple visual beat that expresses only the current sentence.',
+    planEntry.direction || 'Stage one simple visual beat that expresses only the current sentence.',
   );
   const usesImage2Text = textMode === 'image2';
   const masterSize = usesImage2Text ? '1024x1536' : '1024x1024';
@@ -334,6 +414,21 @@ ${selectedStyle.caption_prompt} Use 1–3 large readable lines with generous 48-
             'identity exactly and never the pose',
         }]
       : []),
+    ...(planEntry.location && setReferences[`location:${planEntry.location}`]
+      ? [{
+          path: setReferences[`location:${planEntry.location}`],
+          role:
+            'the fixed reference for this scene\'s location — keep its layout, ' +
+            'structure and fittings the same, and stage the action inside it',
+        }]
+      : []),
+    ...(planEntry.objects || [])
+      .filter((objectId) => setReferences[`object:${objectId}`])
+      .slice(0, 2)
+      .map((objectId) => ({
+        path: setReferences[`object:${objectId}`],
+        role: `the fixed reference for the ${planObjects[objectId]?.name || objectId} — keep its shape, material and wear identical`,
+      })),
     ...(shouldChainPrevious && previousColor
       ? [{path: previousColor, role: 'the previous scene, for setting continuity only — never copy its composition'}]
       : []),
