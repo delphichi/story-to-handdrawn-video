@@ -186,6 +186,7 @@ Skill 的完整行为约定见 [skill-package/story-to-handdrawn-video/SKILL.md]
 | `check.yml` | push / PR / 手动 | TypeScript 检查，并用临时生成的图片跑一遍导入 + 分镜校验 |
 | `render-uploaded.yml` | 手动（workflow_dispatch） | 把 `inputs/` 目录里的有序图片渲染成视频，产物作为 artifact 下载 |
 | `render-story.yml` | 手动（workflow_dispatch） | **一句话（或故事文本）→ 分镜企划板 → 出图 → 视频**，扩写与出图都交给 FAL AI（需 `FAL_KEY` secret）；产物统一收进 `完成檔/<标题>-<时间戳>/` |
+| `render-motion.yml` | 手动（workflow_dispatch） | **同样的关键帧，改用影片模型让画面真的动**，再用 ffmpeg 拼接；与 `render-story.yml` 并存，不互相取代 |
 
 渲染流程：把按顺序命名的图片（`01.png`、`02.png`…）提交到 `inputs/`，然后在 **Actions → render-uploaded → Run workflow** 里选择标题、转场（`cut` / `page-flip`）、布局、每页时长和画质（`preview` / `final`），运行结束后从 artifact 下载 `out/*.mp4`。
 
@@ -209,6 +210,24 @@ Skill 的完整行为约定见 [skill-package/story-to-handdrawn-video/SKILL.md]
 - **`package-lock.json` 里的 231 个依赖都指向 `registry.npmmirror.com`。** 工作流用 `npm ci --registry=https://registry.npmjs.org --replace-registry-host=always` 改写主机名，避免从 GitHub runner 访问镜像源。
 - **需要 Chrome Headless Shell。** runner 预装的 Chrome 已移除旧版 headless 模式，Remotion 会启动失败，所以工作流里先执行 `npx remotion browser ensure`（约 150MB，从 `remotion.media` 下载；若组织限制出网需放行该域名）。
 - ffmpeg 与 ffprobe 都是必需的，工作流会在缺失时用 apt 安装。
+
+### 两条产线的差别
+
+`render-story.yml` 和 `render-motion.yml` 共用前半段——扩写、锚点、关键帧全都一样——在关键帧之后分开：
+
+| | `render-story`（默认） | `render-motion` |
+|---|---|---|
+| 画面动不动 | 不动，动效来自「文字 → 黑白 → 彩色」逐层揭示 | 画面本身会动 |
+| 谁产出影片 | Remotion 按分镜渲染 | 影片模型逐格生成片段，ffmpeg 拼接 |
+| 成本 | 只花图片额度 | 图片额度 + **影片额度**（贵一个量级） |
+| 可重现 | 同样输入 → 同样输出 | 每次重跑都不同 |
+| 时长 | 每格 4.4~6.2 秒，由字数算出 | 每格取整并夹到模型允许区间 |
+
+影片模型三选一：`kling-v3-pro`（**比例跟随首帧**，能保住 3:4，时长 3~15 秒）、`seedance-2.0`（较便宜，支持 480p/720p/1080p，4~15 秒）、`minimax-h3`（只有 2K，5~15 秒）。
+
+动态提示词是**拼装的，不再过一次 LLM**：`move` 已经写明了运镜（push-in / track-left），`action` 已经写明了主体动作，再让模型改写一遍只是同义反复。提示词里固定加一句「这是手绘图，必须保持手绘，不要变成照片、不要加字、不要在片段中途切镜」——这是这类模型最常见的失控方向。
+
+各片段回来的尺寸可能不一致，所以拼接走 ffmpeg 的 filter graph 逐个缩放补边到统一画布，而不是 concat demuxer（后者遇到尺寸不同直接报错）。
 
 ### 项目结构
 
@@ -388,6 +407,7 @@ Two workflows ship in `.github/workflows/`:
 | `check.yml` | push / PR / manual | Type check, plus an import + storyboard-validation smoke run on throwaway images |
 | `render-uploaded.yml` | manual (workflow_dispatch) | Renders the ordered images in `inputs/` and uploads the video as an artifact |
 | `render-story.yml` | manual (workflow_dispatch) | **One sentence (or a story file) → preview shot plan → illustrations → video**, with FAL AI both expanding and drawing (needs a `FAL_KEY` secret); outputs collected into `完成檔/<title>-<stamp>/` |
+| `render-motion.yml` | manual (workflow_dispatch) | **The same keyframes, animated by a video model** and stitched with ffmpeg; runs alongside `render-story.yml` rather than replacing it |
 
 Commit your pages as `inputs/01.png`, `inputs/02.png`, …, then run **Actions → render-uploaded → Run workflow** and pick title, transition, layout, page duration, and quality. Download `out/*.mp4` from the run's artifacts.
 
@@ -411,6 +431,24 @@ Limits worth knowing:
 - **`package-lock.json` resolves all 231 packages from `registry.npmmirror.com`.** The workflows install with `npm ci --registry=https://registry.npmjs.org --replace-registry-host=always`.
 - **Chrome Headless Shell is required.** The runner's preinstalled Chrome dropped old headless mode, so `npx remotion browser ensure` runs first (~150 MB from `remotion.media`; allowlist that host if egress is restricted).
 - ffmpeg and ffprobe are both required; the workflows apt-install them when missing.
+
+### Two pipelines
+
+`render-story.yml` and `render-motion.yml` share everything up to the keyframes — expansion, anchors, illustrations — and diverge after them:
+
+| | `render-story` (default) | `render-motion` |
+|---|---|---|
+| Does the picture move | No; the motion is a text → black-and-white → colour reveal | Yes |
+| What makes the video | Remotion renders the storyboard | A video model animates each beat, ffmpeg stitches |
+| Cost | Image credits only | Image credits plus **video credits**, an order of magnitude more |
+| Reproducible | Same input, same output | Every run differs |
+| Timing | 4.4–6.2s per beat, derived from caption length | Rounded and clamped to what the model accepts |
+
+Three models: `kling-v3-pro` (**aspect ratio follows the first frame**, so the 3:4 frame survives; 3–15s), `seedance-2.0` (cheaper, 480p/720p/1080p, 4–15s), `minimax-h3` (2K only, 5–15s).
+
+Motion prompts are assembled rather than written by another model: `move` already names the camera behaviour and `action` already names what the subject does, so a second LLM pass would only paraphrase them. Every prompt carries one fixed instruction — the drawing must stay a drawing, with no photographic detail, no added text and no cut inside the clip — which is where these models most often drift.
+
+Clips can come back at different sizes, so stitching goes through an ffmpeg filter graph that scales and pads each to a common canvas; the concat demuxer refuses mismatched inputs outright.
 
 ### License
 

@@ -19,6 +19,7 @@
     "styles": "node scripts/list-handdrawn-styles.mjs",
     "sheet": "node scripts/storyboard-sheet.mjs",
     "board": "node scripts/preview-board.mjs",
+    "motion": "node scripts/motion-clips.mjs",
     "import:codex": "node scripts/import-codex-images.mjs",
     "import:uploaded": "node scripts/import-uploaded-pages.mjs",
     "render": "remotion render src/index.ts PictureSilent out/picture_silent.mp4 --codec=h264 --crf=18 --pixel-format=yuv420p --muted --concurrency=1",

@@ -1,0 +1,193 @@
+name: render-motion
+
+# The second pipeline: the same keyframes, animated by a video model instead of
+# revealed by Remotion.
+#
+# This does not replace render-story. That one is deterministic, silent, cheap
+# and its motion is a layer reveal. This one spends video-model credits so the
+# picture itself moves, and every run comes back different. They share only the
+# keyframes and the fixed references that anchor them.
+#
+# Requires the same FAL_KEY secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      premise:
+        description: 'One sentence to expand into a story. Leave empty to use story_file.'
+        required: false
+        default: ''
+      scenes:
+        description: 'How many beats to expand the premise into (2-20)'
+        required: true
+        default: '5'
+      story_file:
+        description: 'UTF-8 story text file in this repo (ignored when premise is set)'
+        required: true
+        default: 'examples/story.txt'
+      title:
+        description: 'Video title'
+        required: true
+        default: '手绘故事'
+      style:
+        description: 'Style id, number, Chinese name, or alias'
+        required: true
+        default: 'colored-pencil-diary'
+      model:
+        description: 'Video model. kling keeps the keyframe aspect; seedance is cheaper; minimax is 2K only.'
+        required: true
+        default: 'kling-v3-pro'
+        type: choice
+        options: [kling-v3-pro, seedance-2.0, minimax-h3]
+      resolution:
+        description: 'seedance only: 480p / 720p / 1080p. Leave empty for the model default.'
+        required: false
+        default: ''
+
+jobs:
+  motion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: delphichi/2025TRIP
+          path: .fal-tools
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check secret
+        env:
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+        run: |
+          if [ -z "$FAL_KEY" ]; then
+            echo "FAL_KEY secret is not set (Settings -> Secrets and variables -> Actions)" >&2
+            exit 1
+          fi
+
+      - name: Ensure FFmpeg
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -version | head -1
+
+      - name: Install dependencies
+        run: npm ci --registry=https://registry.npmjs.org --replace-registry-host=always
+
+      - name: Expand premise into a story
+        if: inputs.premise != ''
+        env:
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          PREMISE: ${{ inputs.premise }}
+          SCENES: ${{ inputs.scenes }}
+        run: |
+          set -euo pipefail
+          node scripts/expand-story.mjs \
+            --premise "$PREMISE" \
+            --scenes "$SCENES" \
+            --out story.generated.txt \
+            --lock-out character-lock.generated.txt \
+            --plan-out visual-plan.generated.json \
+            --sheet-out shot-list.generated.json
+          echo "STORY_FILE=story.generated.txt" >> "$GITHUB_ENV"
+
+      # Keyframes come from the existing pipeline, anchors and all — this
+      # workflow changes what happens after them, not how they are drawn.
+      - name: Generate keyframes
+        env:
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          FAL_IMAGE_CLI: ${{ github.workspace }}/.fal-tools/.claude/skills/fal-image-gen/scripts/fal_image.py
+          CODEX_HOME: ${{ github.workspace }}/tools/fal-imagegen
+          OPENAI_API_KEY: unused-images-come-from-fal
+          STORY_FILE: ${{ env.STORY_FILE || inputs.story_file }}
+          TITLE: ${{ inputs.title }}
+          STYLE: ${{ inputs.style }}
+        run: |
+          set -euo pipefail
+          test -f "$STORY_FILE" || { echo "Story file not found: $STORY_FILE" >&2; exit 1; }
+          ARGS=(--input "$STORY_FILE" --title "$TITLE" --style "$STYLE"
+                --text-mode font --generator api --generate --apply)
+          if [ -s character-lock.generated.txt ]; then
+            ARGS+=(--character-lock "$(cat character-lock.generated.txt)")
+          fi
+          if [ -s visual-plan.generated.json ]; then
+            ARGS+=(--visual-plan visual-plan.generated.json)
+          fi
+          npm run story -- "${ARGS[@]}"
+          node scripts/validate-storyboard.mjs storyboard.json
+
+      - name: Animate and stitch
+        env:
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          FAL_IMAGE_CLI: ${{ github.workspace }}/.fal-tools/.claude/skills/fal-image-gen/scripts/fal_image.py
+          MODEL: ${{ inputs.model }}
+          RESOLUTION: ${{ inputs.resolution }}
+        run: |
+          set -euo pipefail
+          ARGS=(--storyboard storyboard.json --model "$MODEL")
+          if [ -s shot-list.generated.json ]; then
+            ARGS+=(--shot-list shot-list.generated.json)
+          fi
+          if [ -n "$RESOLUTION" ]; then
+            ARGS+=(--resolution "$RESOLUTION")
+          fi
+          npm run motion -- "${ARGS[@]}"
+
+      - name: Collect outputs
+        id: collect
+        env:
+          TITLE: ${{ inputs.title }}
+        run: |
+          set -euo pipefail
+          slug=$(python3 -c "
+          import re, sys
+          name = re.sub(r'[^\w]+', '-', sys.argv[1], flags=re.UNICODE).strip('-')
+          print(name[:40] or 'story')
+          " "$TITLE")
+          dir="完成檔/${slug}-motion-$(date -u '+%Y%m%d-%H%M')"
+          mkdir -p "$dir"
+
+          if [ ! -s out/motion_story.mp4 ]; then
+            echo "No stitched video at out/motion_story.mp4" >&2
+            exit 1
+          fi
+          cp out/motion_story.mp4 "$dir/${slug}-motion.mp4"
+          cp -r out/motion "$dir/片段"
+          cp storyboard.json "$dir/storyboard.json"
+          for extra in story.generated.txt shot-list.generated.json visual-plan.generated.json; do
+            if [ -s "$extra" ]; then
+              cp "$extra" "$dir/${extra/.generated/}"
+            fi
+          done
+          if [ -d public/assets/generated ]; then
+            cp -r public/assets/generated "$dir/关键帧"
+          fi
+          if [ -d prompts/generated/motion ]; then
+            cp -r prompts/generated/motion "$dir/动态提示词"
+          fi
+
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 动态影片"
+            echo '```'
+            find "$dir" -maxdepth 1 -type f | sort
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motion-${{ inputs.model }}
+          path: ${{ steps.collect.outputs.dir }}
+          retention-days: 14
+          if-no-files-found: error
