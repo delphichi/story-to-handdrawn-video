@@ -58,6 +58,7 @@ const transitionSec = Number(args['transition-sec'] || 0.7);
 const shouldGenerate = args.generate === true;
 const shouldGenerateWithApi = shouldGenerate && generator === 'api';
 const shouldPrepareCodex = shouldGenerate && generator === 'codex';
+const shouldChainPrevious = args['chain-previous'] === true;
 const shouldApply = args.apply === true;
 const shouldRender = args.render === true;
 const shouldForce = args.force === true;
@@ -269,9 +270,11 @@ let previousColor = null;
 const scenes = [];
 const codexJobs = [];
 
-let codexCharacterReference = null;
-if (generator === 'codex') {
-  codexCharacterReference = absoluteAsset('00_character_reference.png');
+// A fixed character sheet is the only thing that keeps a face the same across
+// scenes. Without it the sole identity reference is the previous scene, so
+// every shot inherits the last shot's drift and it compounds down the story.
+let characterReference = absoluteAsset('00_character_reference.png');
+{
   const characterPrompt = writePrompt(
     '00_character_reference.txt',
     `Use case: illustration-story
@@ -284,15 +287,27 @@ Composition: square canvas on ${illustrationBackground}, all uncropped full-body
 Color and material: ${selectedStyle.color_hint}
 Constraints: this is an identity reference only; no text, letters, numbers, labels, captions, speech bubbles, logo, signature or watermark; ${selectedStyle.avoid}.`,
   );
-  codexJobs.push({
-    id: 'character_reference',
-    role: 'reference',
-    prompt_file: characterPrompt,
-    prompt: readFileSync(characterPrompt, 'utf8').trim(),
-    output_master: codexCharacterReference,
-    references: styleReferencePaths,
-    reference_count: styleReferencePaths.length,
-  });
+  if (generator === 'codex') {
+    codexJobs.push({
+      id: 'character_reference',
+      role: 'reference',
+      prompt_file: characterPrompt,
+      prompt: readFileSync(characterPrompt, 'utf8').trim(),
+      output_master: characterReference,
+      references: styleReferencePaths,
+      reference_count: styleReferencePaths.length,
+    });
+  } else if (shouldGenerateWithApi) {
+    runImage2({
+      images: styleReferencePaths,
+      promptFile: characterPrompt,
+      size: '1024x1024',
+      out: characterReference,
+    });
+  } else {
+    // Plan-only run: nothing is drawn, so there is no sheet to reference.
+    characterReference = null;
+  }
 }
 
 for (let index = 0; index < storyParts.length; index += 1) {
@@ -320,12 +335,33 @@ ${selectedStyle.caption_prompt} Use 1–3 large readable lines with generous 48-
     ? 'Illustration panel (pixels y=512–1536): use this exact lower 1024×1024 square for the scene. Leave the 342–512 transition band completely white.'
     : 'Use the entire 1024×1024 square for the scene.';
 
-  const hasContinuityReference = Boolean(previousColor) || Boolean(codexCharacterReference);
-  const sceneReferenceBrief = fixedReferenceLegend
-    ? `Input images: ${fixedReferenceLegend}${hasContinuityReference ? '; any later image is an identity or continuity reference' : ''}. Use the fixed style images only for drawing language, texture, palette, page rhythm and finish. Ignore their depicted people, actions, objects and text.`
-    : hasContinuityReference
-      ? `Input images: every supplied image is an identity or continuity reference. Preserve identity and useful continuity, but follow the written "${selectedStyle.name_zh}" style profile rather than copying an earlier composition.`
-      : `Input images: none. Follow the written "${selectedStyle.name_zh}" style profile exactly.`;
+  const sceneReferences = [
+    ...selectedStyle.references.map((reference, referenceIndex) => ({
+      path: styleReferencePaths[referenceIndex],
+      role: `the ${reference.role}, for drawing language only`,
+    })),
+    ...(characterReference
+      ? [{
+          path: characterReference,
+          role:
+            'the fixed character sheet — the single source of truth for every ' +
+            'protagonist\'s face, hair, age, build and clothing colours. Copy the ' +
+            'identity exactly and never the pose',
+        }]
+      : []),
+    ...(shouldChainPrevious && previousColor
+      ? [{path: previousColor, role: 'the previous scene, for setting continuity only — never copy its composition'}]
+      : []),
+  ];
+  const sceneReferenceBrief = sceneReferences.length
+    ? `Input images: ${sceneReferences
+        .map((reference, referenceIndex) => `image ${referenceIndex + 1} is ${reference.role}`)
+        .join('; ')}.${
+        styleReferencePaths.length
+          ? " Ignore the style images' depicted people, actions, objects and text."
+          : ''
+      }`
+    : `Input images: none. Follow the written "${selectedStyle.name_zh}" style profile exactly.`;
   const masterPrompt = writePrompt(
     `${id}_master.txt`,
     `Use case: illustration-story
@@ -347,10 +383,7 @@ Constraints: non-graphic, emotionally restrained storytelling; no blood, wounds,
 
   if (shouldGenerateWithApi) {
     runImage2({
-      images: [
-        ...styleReferencePaths,
-        ...(previousColor ? [previousColor] : []),
-      ],
+      images: sceneReferences.map((reference) => reference.path),
       promptFile: masterPrompt,
       size: masterSize,
       out: absoluteAsset(masterName),
@@ -415,10 +448,7 @@ Constraints: non-graphic, emotionally restrained storytelling; no blood, wounds,
   }
 
   if (generator === 'codex') {
-    const codexSceneReferences = [
-      ...styleReferencePaths,
-      codexCharacterReference,
-    ];
+    const codexSceneReferences = sceneReferences.map((reference) => reference.path);
     codexJobs.push({
       id,
       role: 'scene',

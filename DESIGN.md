@@ -13,6 +13,12 @@
 - Page-flip mode: `text → color`, followed by a left-bound 3D page turn
 - No camera shake, bounce, narration, or text-synchronized music
 
+## Character identity
+
+- Every run draws one fixed character sheet before any scene
+- Each scene references that sheet for identity, never an earlier scene
+- Referencing the previous scene is opt-in; it compounds drift and fights the shot plan
+
 ## Assets
 
 - Uploaded masters are copied into a content-addressed generated directory
