@@ -65,16 +65,28 @@ const system = `你是一位中文短篇故事作者，为无配音的手绘故�
 
 同时给出角色锁定（character_lock）：用一段话固定所有反复出现的角色，写明各自的年龄、脸型、发型、服装颜色与身体比例。这段文字会被送进每一张插画的提示词，用来保证同一个人在所有画面里长得一样。只描述外观，不要写剧情。
 
-再给出镜头设计（shots），与 story 一一对应、长度相同，每格一句英文，说明这一格怎么取景。规则：
+再给出镜头设计（shots），与 story 一一对应、长度相同。每格是一个对象，含 camera / action / environment 三栏英文：
 
+camera（怎么拍）
 1. 只用这四种景别：wide establishing shot、full shot、medium shot、medium close-up。
 2. medium close-up 只能用在情绪反应的那一两格，其余用中景或更远。不要 extreme close-up，也不要要求裁切人物。
 3. 不要连续两格用同一种景别——景别变化是这支片子唯一的节奏来源。
-4. 除景别外，说明视角（eye level / low angle / high angle）与画面重心放什么。
-5. 每句不超过 25 个英文单词，只写怎么拍，不要重复剧情，不要提颜色或画材。
+4. 一并写明视角（eye level / low angle / high angle）与画面重心放什么。
+5. 不超过 20 个英文单词。
+
+action（角色在做什么）
+6. 只写看得见的动作与姿态，不写心理活动、不写台词。
+7. 只出现这一句里必须出场的角色，不要凭空加人。
+8. 不超过 20 个英文单词。
+
+environment（场景）
+9. 写地点、时间感、以及这一格必须出现的关键道具。
+10. 同一个地点在相邻几格里要用一致的描述，读者才不会觉得场景在跳。
+11. 不要提颜色、画材或笔触——那些由风格锁定统一管。
+12. 不超过 20 个英文单词。
 
 只输出 JSON，不要任何其他文字：
-{"title": "四到八字的标题", "character_lock": "...", "story": ["第一句。", "第二句。"], "shots": ["Wide establishing shot, eye level, ...", "Medium shot, low angle, ..."]}`;
+{"title": "四到八字的标题", "character_lock": "...", "story": ["第一句。", "第二句。"], "shots": [{"camera": "Wide establishing shot, eye level, ...", "action": "...", "environment": "..."}]}`;
 
 const parseJson = (text) => {
   const cleaned = String(text || '')
@@ -154,12 +166,25 @@ writeFileSync(lockPath, `${String(result.character_lock || '').trim()}\n`);
 // characters becomes two beats. Split here with the same function so the plan's
 // keys land on the scenes they were written for; when a sentence does split,
 // both halves inherit its shot.
-const shots = Array.isArray(result.shots) ? result.shots : [];
+const shotFields = ['camera', 'action', 'environment'];
+const normaliseShot = (shot) => {
+  if (typeof shot === 'string') return shot.trim();
+  if (!shot || typeof shot !== 'object') return '';
+  const filled = shotFields.filter((field) => String(shot[field] || '').trim());
+  if (filled.length === 0) return '';
+  if (filled.length < shotFields.length) {
+    console.log(`⚠️  A shot is missing ${shotFields.filter((f) => !filled.includes(f)).join(', ')}.`);
+  }
+  return filled
+    .map((field) => `${field[0].toUpperCase()}${field.slice(1)}: ${String(shot[field]).trim()}`)
+    .join('; ');
+};
+const shots = (Array.isArray(result.shots) ? result.shots : []).map(normaliseShot);
 const visualPlan = {};
 let beatIndex = 0;
 for (const [sentenceIndex, sentence] of result.story.entries()) {
   const beats = splitStory(sentence);
-  const shot = String(shots[sentenceIndex] || '').trim();
+  const shot = shots[sentenceIndex] || '';
   for (let offset = 0; offset < beats.length; offset += 1) {
     beatIndex += 1;
     if (shot) visualPlan[String(beatIndex).padStart(2, '0')] = shot;
@@ -170,6 +195,25 @@ for (const [sentenceIndex, sentence] of result.story.entries()) {
 }
 writeFileSync(planPath, `${JSON.stringify(visualPlan, null, 2)}\n`);
 
+const sheetPath = resolve(String(args['sheet-out'] || 'shot-list.generated.json'));
+writeFileSync(
+  sheetPath,
+  `${JSON.stringify(
+    {
+      title: result.title || '',
+      character_lock: String(result.character_lock || '').trim(),
+      shots: result.story.map((sentence, sentenceIndex) => ({
+        text: sentence,
+        ...(typeof result.shots?.[sentenceIndex] === 'object' && result.shots[sentenceIndex]
+          ? result.shots[sentenceIndex]
+          : {camera: shots[sentenceIndex] || ''}),
+      })),
+    },
+    null,
+    2,
+  )}\n`,
+);
+
 if (shots.length !== result.story.length) {
   console.log(`⚠️  ${shots.length} shot directions for ${result.story.length} sentences; the rest fall back to the default framing.`);
 }
@@ -179,5 +223,6 @@ console.log(
     `Title: ${result.title || '(none)'}\n` +
     `Story (${result.story.length} sentences → ${beatIndex} beats) → ${storyPath}\n` +
     `Character lock → ${lockPath}\n` +
-    `Visual plan (${Object.keys(visualPlan).length} beats) → ${planPath}`,
+    `Visual plan (${Object.keys(visualPlan).length} beats) → ${planPath}\n` +
+    `Shot list → ${sheetPath}`,
 );

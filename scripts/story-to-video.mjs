@@ -1,11 +1,10 @@
 import {execFileSync, spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {homedir} from 'node:os';
+import {copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {createImageGenerator} from './lib/image-gen.mjs';
 import {splitStory} from './lib/split-story.mjs';
-
 import {resolveStyle} from './handdrawn-style-library.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -188,35 +187,7 @@ const writePrompt = (name, value) => {
   return path;
 };
 
-const imageCli = resolve(
-  process.env.CODEX_HOME || resolve(homedir(), '.codex'),
-  'skills/.system/imagegen/scripts/image_gen.py',
-);
-
-const runImage2 = ({images, promptFile, size, out}) => {
-  if (!existsSync(imageCli)) throw new Error(`Image 2 CLI not found: ${imageCli}`);
-  const operation = images.length > 0 ? 'edit' : 'generate';
-  const commandArgs = [
-    imageCli,
-    operation,
-    '--model',
-    'gpt-image-2',
-    ...images.flatMap((image) => ['--image', image]),
-    '--prompt-file',
-    promptFile,
-    '--size',
-    size,
-    '--quality',
-    'high',
-    '--out',
-    out,
-    ...(shouldForce ? ['--force'] : []),
-  ];
-  execFileSync(process.env.PYTHON || 'python3', commandArgs, {
-    cwd: root,
-    stdio: 'inherit',
-  });
-};
+const runImage2 = createImageGenerator({root, force: shouldForce});
 
 const fixedReferenceLegend = selectedStyle.references
   .map((reference, index) => `image ${index + 1} is the ${reference.role}`)
@@ -301,12 +272,23 @@ Constraints: this is an identity reference only; no text, letters, numbers, labe
       reference_count: styleReferencePaths.length,
     });
   } else if (shouldGenerateWithApi) {
-    runImage2({
-      images: styleReferencePaths,
-      promptFile: characterPrompt,
-      size: characterSheetSize,
-      out: characterReference,
-    });
+    // Reusing the sheet a preview run already drew keeps the identity anchor
+    // byte-identical between what you approved and what gets rendered.
+    const provided = args['character-sheet']
+      ? resolve(root, String(args['character-sheet']))
+      : null;
+    if (provided) {
+      if (!existsSync(provided)) throw new Error(`Character sheet not found: ${provided}`);
+      copyFileSync(provided, characterReference);
+      console.log(`Reusing character sheet: ${provided}`);
+    } else {
+      runImage2({
+        images: styleReferencePaths,
+        promptFile: characterPrompt,
+        size: characterSheetSize,
+        out: characterReference,
+      });
+    }
   } else {
     // Plan-only run: nothing is drawn, so there is no sheet to reference.
     characterReference = null;

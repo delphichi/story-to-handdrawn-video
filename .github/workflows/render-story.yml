@@ -46,6 +46,12 @@ on:
         default: 'cut'
         type: choice
         options: [cut, page-flip]
+      sheet:
+        description: 'Storyboard sheet: only = draw the sheet and stop (cheap check before per-scene credits); also = sheet then full render; off = skip. Needs a premise.'
+        required: true
+        default: 'off'
+        type: choice
+        options: [off, only, also]
       quality:
         description: 'preview (720x960) or final (1080x1440)'
         required: true
@@ -133,7 +139,34 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # One image shows every beat at once, so pacing, framing variety and — the
+      # reason it exists — character consistency can be judged before spending a
+      # credit per scene. The sheet's character reference is handed to the real
+      # run so the anchor is identical to the one you approved.
+      - name: Draw storyboard sheet
+        if: inputs.sheet != 'off'
+        env:
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          FAL_IMAGE_CLI: ${{ github.workspace }}/.fal-tools/.claude/skills/fal-image-gen/scripts/fal_image.py
+          CODEX_HOME: ${{ github.workspace }}/tools/fal-imagegen
+          STYLE: ${{ inputs.style }}
+        run: |
+          set -euo pipefail
+          if [ ! -s shot-list.generated.json ]; then
+            echo "A storyboard sheet needs the shot list the premise expansion writes." >&2
+            echo "Either fill in premise, or set sheet to off." >&2
+            exit 1
+          fi
+          npm run sheet -- --shot-list shot-list.generated.json --style "$STYLE"
+          {
+            echo "### 分镜总览"
+            echo '```'
+            cat storyboard-sheet.generated.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate illustrations and storyboard
+        if: inputs.sheet != 'only'
         env:
           FAL_KEY: ${{ secrets.FAL_KEY }}
           FAL_IMAGE_CLI: ${{ github.workspace }}/.fal-tools/.claude/skills/fal-image-gen/scripts/fal_image.py
@@ -162,10 +195,15 @@ jobs:
           if [ -s visual-plan.generated.json ]; then
             ARGS+=(--visual-plan visual-plan.generated.json)
           fi
+          # Anchor the render to the sheet that was reviewed, not a fresh draw.
+          if [ -s character-sheet.generated.png ]; then
+            ARGS+=(--character-sheet character-sheet.generated.png)
+          fi
           npm run story -- "${ARGS[@]}"
           node scripts/validate-storyboard.mjs storyboard.json
 
       - name: Render
+        if: inputs.sheet != 'only'
         run: |
           if [ "${{ inputs.quality }}" = "final" ]; then
             npm run render
@@ -195,11 +233,21 @@ jobs:
 
           shopt -s nullglob
           videos=(out/*.mp4)
-          extras=(story.generated.txt character-lock.generated.txt visual-plan.generated.json)
+          extras=(
+            story.generated.txt
+            character-lock.generated.txt
+            visual-plan.generated.json
+            shot-list.generated.json
+            storyboard-sheet.generated.png
+            storyboard-sheet.generated.txt
+            character-sheet.generated.png
+          )
           shopt -u nullglob
 
-          if [ ${#videos[@]} -eq 0 ]; then
-            echo "No rendered video in out/" >&2
+          # A sheet-only run stops before rendering, so a missing video is only
+          # a failure when there is no sheet either.
+          if [ ${#videos[@]} -eq 0 ] && [ ! -s storyboard-sheet.generated.png ]; then
+            echo "Nothing was produced: no video in out/ and no storyboard sheet" >&2
             exit 1
           fi
 
@@ -210,7 +258,9 @@ jobs:
             cp "$video" "$dir/${slug}${base#picture_silent}.mp4"
           done
 
-          cp storyboard.json "$dir/storyboard.json"
+          if [ -s storyboard.json ]; then
+            cp storyboard.json "$dir/storyboard.json"
+          fi
           for extra in "${extras[@]}"; do
             if [ -s "$extra" ]; then
               cp "$extra" "$dir/${extra/.generated/}"
