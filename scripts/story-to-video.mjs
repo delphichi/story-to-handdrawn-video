@@ -273,6 +273,9 @@ const codexJobs = [];
 // A fixed character sheet is the only thing that keeps a face the same across
 // scenes. Without it the sole identity reference is the previous scene, so
 // every shot inherits the last shot's drift and it compounds down the story.
+// Four views per protagonist need width: on a square canvas each figure would
+// land around 256px and lose the face detail the sheet exists to pin down.
+const characterSheetSize = '2048x1024';
 let characterReference = absoluteAsset('00_character_reference.png');
 {
   const characterPrompt = writePrompt(
@@ -280,10 +283,10 @@ let characterReference = absoluteAsset('00_character_reference.png');
     `Use case: illustration-story
 Asset type: fixed protagonist character reference sheet for a hand-drawn Chinese story video in the "${selectedStyle.name_zh}" style
 ${characterReferenceBrief}
-Primary request: draw ONLY the recurring protagonists described below. Show each protagonist in two simple full-body poses, front view and three-quarter view, arranged side by side.
+Primary request: draw ONLY the recurring protagonists described below as a character turnaround. Give each protagonist one row of four standing full-body views, left to right: front, three-quarter, side profile, and back. Keep the arms relaxed at the sides in every view so the clothing reads clearly.
 Character lock: ${characterLock}
 Style: ${styleLock}
-Composition: square canvas on ${illustrationBackground}, all uncropped full-body poses centered with generous spacing and a clean 10% safe border. No scenery, furniture, extra people, props or decorative marks.
+Composition: wide canvas on ${illustrationBackground}. One protagonist per row. Within a row the four views share the same height and stand on a common baseline, evenly spaced, so they read as the same person rotating. Every figure is uncropped full-body with a clean 8% safe border. No scenery, furniture, extra people, props or decorative marks.
 Color and material: ${selectedStyle.color_hint}
 Constraints: this is an identity reference only; no text, letters, numbers, labels, captions, speech bubbles, logo, signature or watermark; ${selectedStyle.avoid}.`,
   );
@@ -301,7 +304,7 @@ Constraints: this is an identity reference only; no text, letters, numbers, labe
     runImage2({
       images: styleReferencePaths,
       promptFile: characterPrompt,
-      size: '1024x1024',
+      size: characterSheetSize,
       out: characterReference,
     });
   } else {

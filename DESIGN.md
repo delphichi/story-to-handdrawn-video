@@ -16,6 +16,7 @@
 ## Character identity
 
 - Every run draws one fixed character sheet before any scene
+- The sheet is a turnaround: front, three-quarter, side and back, one row per protagonist
 - Each scene references that sheet for identity, never an earlier scene
 - Referencing the previous scene is opt-in; it compounds drift and fights the shot plan
 
